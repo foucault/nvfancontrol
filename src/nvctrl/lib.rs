@@ -86,8 +86,8 @@ impl NvidiaControl {
         tmp
     }
 
-    pub fn set_fanspeed(&self, speed: i16) {
-        let true_speed: i16;
+    pub fn set_fanspeed(&self, speed: i32) {
+        let true_speed: i32;
         if speed < 20 {
             true_speed = 20
         } else if speed > 80 {

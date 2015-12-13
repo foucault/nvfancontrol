@@ -65,7 +65,7 @@ impl Logger {
 
 struct NVFanManager {
     ctrl: NvidiaControl,
-    points: Vec<(u8, u8)>,
+    points: Vec<(u16, u16)>,
     on_time: Option<f64>,
     force: bool
 }
@@ -80,7 +80,7 @@ impl Drop for NVFanManager {
 }
 
 impl NVFanManager {
-    fn new(points: Vec<(u8, u8)>, force: bool) -> Result<NVFanManager, String> {
+    fn new(points: Vec<(u16, u16)>, force: bool) -> Result<NVFanManager, String> {
         let ctrl = NvidiaControl::new();
         let version: f32 = ctrl.get_version().parse::<f32>().unwrap();
 
@@ -106,7 +106,7 @@ impl NVFanManager {
         return Ok(ret);
     }
 
-    fn set_fan(&self, speed: i16) {
+    fn set_fan(&self, speed: i32) {
         self.ctrl.set_ctrl_type(NVCtrlFanControlState::Manual);
         self.ctrl.set_fanspeed(speed);
     }
@@ -117,7 +117,7 @@ impl NVFanManager {
 
     fn update(&mut self) {
 
-        let temp = self.ctrl.get_temp() as u8;
+        let temp = self.ctrl.get_temp() as u16;
         let ctrl_status = self.ctrl.get_ctrl_status().unwrap();
         let rpm = self.ctrl.get_fanspeed_rpm();
 
@@ -146,7 +146,7 @@ impl NVFanManager {
             // if utilization can't be retrieved the utilization leg is
             // always false and ignored
             if dif < 240.0 || gutil.unwrap_or(&-1) > &25 {
-                self.set_fan(pfirst.1 as i16);
+                self.set_fan(pfirst.1 as i32);
             } else {
                 debug!("Grace period expired; turning fan off");
                 self.on_time = None;
@@ -156,7 +156,7 @@ impl NVFanManager {
 
         if temp > plast.0 {
             debug!("Temperature outside curve; setting to max");
-            self.set_fan(plast.1 as i16);
+            self.set_fan(plast.1 as i32);
             return;
         }
 
@@ -173,7 +173,7 @@ impl NVFanManager {
                 let y = (p1.1 as f32) + (((temp - p1.0) as f32) * slope);
 
                 self.on_time = Some(time::precise_time_s());
-                self.set_fan(y as i16);
+                self.set_fan(y as i32);
 
                 return;
             }
@@ -269,7 +269,7 @@ pub fn main() {
     let default_curve = vec![(41, 20), (49, 30), (57, 45), (66, 55),
                              (75, 63), (78, 72), (80, 80)];
 
-    let mut curve: Vec<(u8, u8)>;
+    let mut curve: Vec<(u16, u16)>;
 
     let xdg = BaseDirectories::new();
     match xdg.find_config_file("nvfancontrol.conf") {
@@ -294,7 +294,7 @@ pub fn main() {
                             continue
                         }
 
-                        let x = match parts[0].parse::<u8>() {
+                        let x = match parts[0].parse::<u16>() {
                             Ok(val) => val,
                             Err(e) => {
                                 debug!("Could not parse value {}: {}, ignoring",
@@ -303,7 +303,7 @@ pub fn main() {
                             }
                         };
 
-                        let y = match parts[1].parse::<u8>() {
+                        let y = match parts[1].parse::<u16>() {
                             Ok(val) => val,
                             Err(e) => {
                                 debug!("Could not parse value {}: {}, ignoring",
@@ -363,7 +363,6 @@ pub fn main() {
                 Ok(NVCtrlFanControlState::Auto) => "Auto",
                 Ok(NVCtrlFanControlState::Manual) => "Manual",
                 Err(_) => "ERR"});
-
 
         thread::sleep(timeout);
     }
