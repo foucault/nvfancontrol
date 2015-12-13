@@ -1,0 +1,15 @@
+[package]
+name = "nvfancontrol"
+version = "0.1.0"
+authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
+
+[dependencies]
+nix = "*"
+log = "*"
+getopts = "*"
+time = "*"
+xdg = "*"
+
+[dependencies.nvctrl]
+path = "src/nvctrl"
+
