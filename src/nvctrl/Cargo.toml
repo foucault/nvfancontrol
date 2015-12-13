@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 build = "build.rs"
 
+[dependencies]
+libc = "*"
+
 [lib]
 name = "nvctrl"
 path = "lib.rs"
