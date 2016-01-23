@@ -37,8 +37,8 @@ macro_rules! errln(
     )
 );
 
+const MIN_VERSION: f32 = 352.09;
 static RUNNING: AtomicBool = AtomicBool::new(false);
-static MIN_VERSION: f32 = 352.09;
 
 struct Logger;
 
