@@ -37,7 +37,9 @@ macro_rules! errln(
     )
 );
 
+const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
+
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
 struct Logger;
@@ -271,8 +273,17 @@ pub fn main() {
 
     let mut curve: Vec<(u16, u16)>;
 
-    let xdg = BaseDirectories::new();
-    match xdg.find_config_file("nvfancontrol.conf") {
+    let conf_file = match BaseDirectories::new() {
+        Ok(x) => {
+            x.find_config_file(CONF_FILE)
+        },
+        Err(e) => {
+            error!("Could not find xdg conformant dirs: {}", e);
+            None
+        }
+    };
+
+    match conf_file {
         Some(path) => {
 
             match File::open(path.to_str().unwrap()) {
