@@ -8,7 +8,7 @@ nix = "*"
 log = "*"
 getopts = "*"
 time = "*"
-xdg = "*"
+xdg = "2.0.0-pre7"
 
 [dependencies.nvctrl]
 path = "src/nvctrl"
