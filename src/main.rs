@@ -105,7 +105,7 @@ impl NVFanManager {
             force: force
         };
 
-        return Ok(ret);
+        Ok(ret)
     }
 
     fn set_fan(&self, speed: i32) {

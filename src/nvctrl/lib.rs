@@ -42,12 +42,12 @@ impl NvidiaControl {
 
     fn init() -> i32 {
         let ret = unsafe { nv_init() };
-        return ret as i32;
+        ret as i32
     }
 
     fn deinit() -> i32 {
         let ret = unsafe { nv_deinit() };
-        return ret as i32;
+        ret as i32
     }
 
     pub fn get_temp(&self) -> i32 {
