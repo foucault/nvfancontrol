@@ -238,8 +238,8 @@ pub fn main() {
         Err(err) => panic!("Could not start logger: {:?}", err)
     };
 
-    let sigaction = signal::SigAction::new(sigint,
-                                           signal::SockFlag::empty(),
+    let sigaction = signal::SigAction::new(signal::SigHandler::Handler(sigint),
+                                           signal::SaFlags::empty(),
                                            signal::SigSet::empty());
 
     unsafe {
