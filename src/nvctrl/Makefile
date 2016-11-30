@@ -8,7 +8,7 @@ BASENAME = nvctrl_c
 SRC = $(BASENAME).c
 OBJ = $(BUILDDIR)/lib$(BASENAME).o
 OUT = $(BUILDDIR)/lib$(BASENAME).a
-SHELL = bash
+SHELL := /bin/bash
 
 .PHONY: $(BUILDDIR)
 
