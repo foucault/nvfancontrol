@@ -27,14 +27,13 @@ You will need:
 * recent **nightly** version of the Rust compiler
 * static version of libXNVCtrl installed at /usr/lib (`libxvncrtl-dev` package
 on Debian/Ubuntu)
-* nvidia binary driver (like `nvidia-352`)
-* xlib (`libx11-xcb-dev` package on Debian/Ubuntu)
+* Xlib (`libx11-xcb-dev` package on Debian/Ubuntu)
 * Xext (`libxext-dev` package on Debian/Ubuntu)
 
 If libXNVCtrl.a is installed in a
 different directory edit `src/nvctrl/Makefile` to point to the correct path.
 The run `cargo build --release`. The executable can be found at
-`target/release/nvfancontrol`. The XNVCtrl, xlib and Xext libraries are required
+`target/release/nvfancontrol`. The XNVCtrl library is required
 only for building the program, not running it.
 
 ### Use and configure
