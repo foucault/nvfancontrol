@@ -1,5 +1,3 @@
-#![feature(const_fn)]
-
 extern crate nvctrl;
 use nvctrl::{NvidiaControl, NVCtrlFanControlState};
 
@@ -24,7 +22,7 @@ use std::env;
 use std::thread;
 use std::process;
 use std::time::Duration;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering, ATOMIC_BOOL_INIT};
 use std::io::Write;
 
 // http://stackoverflow.com/questions/27588416/how-to-send-output-to-stderr
@@ -40,7 +38,7 @@ macro_rules! errln(
 const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
 
-static RUNNING: AtomicBool = AtomicBool::new(false);
+static RUNNING: AtomicBool = ATOMIC_BOOL_INIT;
 
 struct Logger;
 
