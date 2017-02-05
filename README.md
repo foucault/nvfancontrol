@@ -25,7 +25,7 @@ HowTo
 
 You will need:
 * the rust compiler toolchain, stable >=1.1 or nightly
-* static version of libXNVCtrl installed at /usr/lib (`libxvncrtl-dev` package
+* static version of libXNVCtrl installed at /usr/lib (`libxnvctrl-dev` package
 on Debian/Ubuntu)
 * Xlib (`libx11-xcb-dev` package on Debian/Ubuntu)
 * Xext (`libxext-dev` package on Debian/Ubuntu)
