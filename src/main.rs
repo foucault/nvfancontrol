@@ -80,8 +80,11 @@ impl Drop for NVFanManager {
 }
 
 impl NVFanManager {
-    fn new(points: Vec<(u16, u16)>, force: bool) -> Result<NVFanManager, String> {
-        let ctrl = NvidiaControl::new();
+    fn new(
+            points: Vec<(u16, u16)>, force: bool, limits: Option<(u16, u16)>
+        ) -> Result<NVFanManager, String> {
+
+        let ctrl = NvidiaControl::new(limits);
         let version: f32 = ctrl.get_version().parse::<f32>().unwrap();
 
         if version < MIN_VERSION {
@@ -203,8 +206,11 @@ pub fn main() {
     let mut opts = Options::new();
 
     opts.optflag("d", "debug", "Enable debug messages");
+    opts.optopt("l", "limits",
+        "Comma separated lower and upper limits, use 0 to disable,
+        default: 20,80", "LOWER,UPPER");
     opts.optflag("f", "force", "Always use the custom curve even if the fan is
-                 already spinning on auto mode");
+                 already spinning in auto mode");
     opts.optflag("h", "help", "Print this help message");
 
     let matches = match opts.parse(&args[1..]) {
@@ -229,6 +235,62 @@ pub fn main() {
         force_update = true
     } else {
         force_update = false
+    }
+
+    let limits: Option<(u16, u16)>;
+    if matches.opt_present("l") {
+        match matches.opt_str("l") {
+            Some(res) => {
+                let parts: Vec<&str> = res.split(',').collect();
+                if parts.len() == 1 {
+                    if parts[0] != "0" {
+                        errln!("Invalid option for \"-l\": {}", parts[0]);
+                        process::exit(1);
+                    }
+                    else {
+                        limits = None;
+                    }
+                } else if parts.len() == 2 {
+                    let lower = match parts[0].parse::<u16>() {
+                        Ok(num) => num,
+                        Err(e) => {
+                            errln!("Could not parse {} as lower limit: {}",
+                                   parts[0], e);
+                            process::exit(1);
+                        }
+                    };
+                    let upper = match parts[1].parse::<u16>() {
+                        Ok(num) => num,
+                        Err(e) => {
+                            errln!("Could not parse {} as upper limit: {}",
+                                   parts[1], e);
+                            process::exit(1);
+                        }
+                    };
+                    if upper < lower {
+                        errln!("Lower limit {} is greater than the upper {}",
+                               lower, upper);
+                        process::exit(1);
+                    }
+                    if upper > 100 {
+                        debug!("Upper limit {} is > 100; clipping to 100", upper);
+                        limits = Some((lower, 100));
+                    } else {
+                        limits = Some((lower, upper));
+                    }
+                } else {
+                    errln!("Invalid argument for \"-l\": {:?}", parts);
+                    process::exit(1);
+                }
+            },
+            None => {
+                errln!("Option \"-l\" present but no argument provided");
+                process::exit(1);
+            }
+        }
+    } else {
+        // Default limits
+        limits = Some((20, 80));
     }
 
     match Logger::new(log_level) {
@@ -337,7 +399,7 @@ pub fn main() {
         }
     };
 
-    let mut mgr = match NVFanManager::new(curve, force_update) {
+    let mut mgr = match NVFanManager::new(curve, force_update, limits) {
         Ok(m) => m,
         Err(s) => {
             error!("{}", s);

@@ -25,7 +25,9 @@ pub enum NVCtrlFanControlState {
     Manual
 }
 
-pub struct NvidiaControl;
+pub struct NvidiaControl {
+    limits: (u16, u16)
+}
 
 impl Drop for NvidiaControl {
     fn drop(&mut self) {
@@ -34,8 +36,19 @@ impl Drop for NvidiaControl {
 }
 
 impl NvidiaControl {
-    pub fn new() -> NvidiaControl {
-        let ret = NvidiaControl;
+    pub fn new(lim: Option<(u16, u16)>) -> NvidiaControl {
+        let ret = NvidiaControl{
+            limits: match lim {
+                Some((low, high)) => {
+                    if high > 100 {
+                        (low, 100)
+                    } else {
+                        (low, high)
+                    }
+                },
+                None => (0, 100)
+            }
+        };
         NvidiaControl::init();
         ret
     }
@@ -81,12 +94,13 @@ impl NvidiaControl {
 
     pub fn set_fanspeed(&self, speed: i32) {
         let true_speed: i32;
-        if speed < 20 {
-            true_speed = 20
-        } else if speed > 80 {
-            true_speed = 80
+        let (low, high) = self.limits;
+        if speed < low as i32 {
+            true_speed = low as i32;
+        } else if speed > high as i32 {
+            true_speed = high as i32;
         } else {
-            true_speed = speed
+            true_speed = speed;
         }
         unsafe { nv_set_fanspeed(true_speed as c_int); }
     }
