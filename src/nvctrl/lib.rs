@@ -80,15 +80,7 @@ impl NvidiaControl {
     }
 
     pub fn set_fanspeed(&self, speed: i32) {
-        let true_speed: i32;
-        if speed < 20 {
-            true_speed = 20
-        } else if speed > 80 {
-            true_speed = 80
-        } else {
-            true_speed = speed
-        }
-        unsafe { nv_set_fanspeed(true_speed as c_int); }
+        unsafe { nv_set_fanspeed(speed as c_int); }
     }
 
     pub fn get_fanspeed_rpm(&self) -> i32 {
