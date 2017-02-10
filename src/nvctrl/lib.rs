@@ -5,6 +5,7 @@ use std::ffi::CStr;
 use std::mem;
 use std::collections::HashMap;
 
+#[cfg(any(target_os = "linux", target_os="freebsd"))]
 #[link(name="nvctrl_c")]
 extern {
     fn nv_init() -> c_int;
@@ -29,12 +30,14 @@ pub struct NvidiaControl {
     limits: (u16, u16)
 }
 
+#[cfg(any(target_os = "linux", target_os="freebsd"))]
 impl Drop for NvidiaControl {
     fn drop(&mut self) {
         NvidiaControl::deinit();
     }
 }
 
+#[cfg(any(target_os = "linux", target_os="freebsd"))]
 impl NvidiaControl {
     pub fn new(lim: Option<(u16, u16)>) -> NvidiaControl {
         let ret = NvidiaControl{
