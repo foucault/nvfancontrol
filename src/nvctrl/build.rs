@@ -1,6 +1,7 @@
 use std::process::{Command, Stdio};
 use std::env;
 
+#[cfg(any(target_os="linux", target_os="freebsd"))]
 fn main() {
     let ret = Command::new("make")
         .stdin(Stdio::inherit())
@@ -13,3 +14,6 @@ fn main() {
     println!("cargo:rustc-flags=-L {}/build -l static={} -l {} -l {}",
              out_dir, "nvctrl_c", "X11", "Xext");
 }
+
+#[cfg(target_os="windows")]
+fn main() { }

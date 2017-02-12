@@ -1,5 +1,5 @@
 extern crate nvctrl;
-use nvctrl::{NvidiaControl, NVCtrlFanControlState};
+use nvctrl::{NvFanController, NvidiaControl, NVCtrlFanControlState};
 
 #[macro_use]
 extern crate log;
@@ -74,7 +74,7 @@ impl Drop for NVFanManager {
 
     fn drop(&mut self) {
         debug!("Resetting fan control");
-        self.reset_fan();
+        self.reset_fan().unwrap();
     }
 
 }
@@ -85,7 +85,14 @@ impl NVFanManager {
         ) -> Result<NVFanManager, String> {
 
         let ctrl = NvidiaControl::new(limits);
-        let version: f32 = ctrl.get_version().parse::<f32>().unwrap();
+        let version: f32 = match ctrl.get_version() {
+            Ok(v) => {
+                v.parse::<f32>().unwrap()
+            }
+            Err(e) => {
+                return Err(format!("Could not get driver version: {}", e))
+            }
+        };
 
         if version < MIN_VERSION {
             let err = format!("Unsupported driver version; need >= {:.2}",
@@ -109,22 +116,24 @@ impl NVFanManager {
         Ok(ret)
     }
 
-    fn set_fan(&self, speed: i32) {
-        self.ctrl.set_ctrl_type(NVCtrlFanControlState::Manual);
-        self.ctrl.set_fanspeed(speed);
+    fn set_fan(&self, speed: i32) -> Result<(), String> {
+        try!(self.ctrl.set_ctrl_type(NVCtrlFanControlState::Manual));
+        try!(self.ctrl.set_fanspeed(speed));
+        Ok(())
     }
 
-    fn reset_fan(&self) {
-        self.ctrl.set_ctrl_type(NVCtrlFanControlState::Auto);
+    fn reset_fan(&self) -> Result<(), String> {
+        try!(self.ctrl.set_ctrl_type(NVCtrlFanControlState::Auto));
+        Ok(())
     }
 
-    fn update(&mut self) {
+    fn update(&mut self) -> Result<(), String> {
 
-        let temp = self.ctrl.get_temp() as u16;
-        let ctrl_status = self.ctrl.get_ctrl_status().unwrap();
-        let rpm = self.ctrl.get_fanspeed_rpm();
+        let temp = try!(self.ctrl.get_temp()) as u16;
+        let ctrl_status = try!(self.ctrl.get_ctrl_status());
+        let rpm = try!(self.ctrl.get_fanspeed_rpm());
 
-        let utilization = self.ctrl.get_utilization();
+        let utilization = try!(self.ctrl.get_utilization());
         let gutil = utilization.get("graphics");
 
         let pfirst = self.points.first().unwrap();
@@ -134,7 +143,7 @@ impl NVFanManager {
             match ctrl_status {
                 NVCtrlFanControlState::Auto => {
                     debug!("Fan is enabled on auto control; doing nothing");
-                    return;
+                    return Ok(());
                 },
                 _ => {}
             };
@@ -149,18 +158,24 @@ impl NVFanManager {
             // if utilization can't be retrieved the utilization leg is
             // always false and ignored
             if dif < 240.0 || gutil.unwrap_or(&-1) > &25 {
-                self.set_fan(pfirst.1 as i32);
+                match self.set_fan(pfirst.1 as i32) {
+                    Err(e) => { return Err(e); }
+                    _ => {}
+                }
             } else {
                 debug!("Grace period expired; turning fan off");
                 self.on_time = None;
             }
-            return;
+            return Ok(());
         }
 
         if temp > plast.0 {
             debug!("Temperature outside curve; setting to max");
-            self.set_fan(plast.1 as i32);
-            return;
+            match self.set_fan(plast.1 as i32) {
+                Err(e) => { return Err(e); }
+                _ => {}
+            }
+            return Ok(());
         }
 
         for i in 0..(self.points.len()-1) {
@@ -176,19 +191,28 @@ impl NVFanManager {
                 let y = (p1.1 as f32) + (((temp - p1.0) as f32) * slope);
 
                 self.on_time = Some(time::precise_time_s());
-                self.set_fan(y as i32);
+                match self.set_fan(y as i32) {
+                    Err(e) => { return Err(e); }
+                    _ => {}
+                }
 
-                return;
+                return Ok(());
             }
         }
 
         // If no point is found then fan should be off
         self.on_time = None;
-        self.reset_fan();
+        match self.reset_fan() {
+            Err(e) => { return Err(e); }
+            _ => {}
+        }
+
+        Ok(())
 
     }
 }
 
+#[cfg(any(target_os="linux", target_os="freebsd"))]
 extern fn sigint(_: i32) {
     debug!("Interrupt signal");
     RUNNING.store(false, Ordering::Relaxed);
@@ -298,6 +322,7 @@ pub fn main() {
         Err(err) => panic!("Could not start logger: {:?}", err)
     };
 
+
     let sigaction = signal::SigAction::new(signal::SigHandler::Handler(sigint),
                                            signal::SaFlags::empty(),
                                            signal::SigSet::empty());
@@ -328,7 +353,7 @@ pub fn main() {
         };
     }
 
-    let default_curve = vec![(41, 20), (49, 30), (57, 45), (66, 55),
+    let default_curve = vec![(21, 20), (49, 30), (57, 45), (66, 55),
                              (75, 63), (78, 72), (80, 80)];
 
     let mut curve: Vec<(u16, u16)>;
@@ -408,7 +433,7 @@ pub fn main() {
     };
 
     println!("Using NVIDIA driver version {:.2}",
-             mgr.ctrl.get_version().parse::<f32>().unwrap());
+             mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
 
     let timeout = Duration::new(2, 0);
     RUNNING.store(true, Ordering::Relaxed);
@@ -420,16 +445,19 @@ pub fn main() {
             break;
         }
 
-        mgr.update();
+        match mgr.update() {
+            Err(e) => { errln!("Could not update fan speed: {}", e) },
+            _ => {}
+        };
 
-        let graphics_util = match mgr.ctrl.get_utilization().get("graphics") {
+        let graphics_util = match mgr.ctrl.get_utilization().unwrap().get("graphics") {
             Some(v) => *v,
             None => -1
         };
 
         debug!("Temp: {}; Speed: {} RPM ({}%); Load: {}%; Mode: {}",
-            mgr.ctrl.get_temp(), mgr.ctrl.get_fanspeed_rpm(),
-            mgr.ctrl.get_fanspeed(), graphics_util,
+            mgr.ctrl.get_temp().unwrap(), mgr.ctrl.get_fanspeed_rpm().unwrap(),
+            mgr.ctrl.get_fanspeed().unwrap(), graphics_util,
             match mgr.ctrl.get_ctrl_status() {
                 Ok(NVCtrlFanControlState::Auto) => "Auto",
                 Ok(NVCtrlFanControlState::Manual) => "Manual",
