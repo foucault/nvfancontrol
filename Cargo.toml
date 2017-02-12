@@ -4,11 +4,16 @@ version = "0.1.0"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 
 [dependencies]
-nix = "*"
 log = "*"
 getopts = "*"
 time = "*"
 xdg = "2.0.0-pre7"
+
+[target.'cfg(unix)'.dependencies]
+nix = "*"
+
+[target.'cfg(windows)'.dependencies]
+ctrlc = "*"
 
 [dependencies.nvctrl]
 path = "src/nvctrl"

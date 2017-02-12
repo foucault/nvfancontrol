@@ -8,8 +8,9 @@ use log::{Log, LogRecord, LogLevelFilter, LogMetadata, SetLoggerError};
 extern crate getopts;
 use getopts::Options;
 
-extern crate nix;
-use nix::sys::signal;
+#[cfg(windows)] extern crate ctrlc;
+#[cfg(unix)] extern crate nix;
+#[cfg(unix)] use nix::sys::signal;
 
 extern crate time;
 
@@ -212,8 +213,14 @@ impl NVFanManager {
     }
 }
 
-#[cfg(any(target_os="linux", target_os="freebsd"))]
+#[cfg(unix)]
 extern fn sigint(_: i32) {
+    debug!("Interrupt signal");
+    RUNNING.store(false, Ordering::Relaxed);
+}
+
+#[cfg(windows)]
+fn sigint() {
     debug!("Interrupt signal");
     RUNNING.store(false, Ordering::Relaxed);
 }
@@ -323,12 +330,11 @@ pub fn main() {
     };
 
 
-    let sigaction = signal::SigAction::new(signal::SigHandler::Handler(sigint),
-                                           signal::SaFlags::empty(),
-                                           signal::SigSet::empty());
-
-    unsafe {
-        match signal::sigaction(signal::SIGINT, &sigaction) {
+    #[cfg(unix)] {
+        let sigaction = signal::SigAction::new(signal::SigHandler::Handler(sigint),
+                                               signal::SaFlags::empty(),
+                                               signal::SigSet::empty());
+        match unsafe { signal::sigaction(signal::SIGINT, &sigaction) } {
             Ok(_) => {} ,
             Err(err) => {
                 error!("Could not register SIGINT handler: {:?}", err);
@@ -336,7 +342,7 @@ pub fn main() {
             }
         };
 
-        match signal::sigaction(signal::SIGTERM, &sigaction) {
+        match unsafe { signal::sigaction(signal::SIGTERM, &sigaction) } {
             Ok(_) => {} ,
             Err(err) => {
                 error!("Could not register SIGTERM handler: {:?}", err);
@@ -344,13 +350,23 @@ pub fn main() {
             }
         };
 
-        match signal::sigaction(signal::SIGQUIT, &sigaction) {
+        match unsafe { signal::sigaction(signal::SIGQUIT, &sigaction) } {
             Ok(_) => {} ,
             Err(err) => {
                 error!("Could not register SIGQUIT handler: {:?}", err);
                 process::exit(1);
             }
         };
+    }
+
+    #[cfg(windows)] {
+        match ctrlc::set_handler(signal) {
+            Ok(_) => {} ,
+            Err(err) => {
+                error!("Could not register signal handler: {:?}", err);
+                process::exit(1);
+            }
+        }
     }
 
     let default_curve = vec![(21, 20), (49, 30), (57, 45), (66, 55),
