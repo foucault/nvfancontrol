@@ -360,7 +360,7 @@ pub fn main() {
     }
 
     #[cfg(windows)] {
-        match ctrlc::set_handler(signal) {
+        match ctrlc::set_handler(sigint) {
             Ok(_) => {} ,
             Err(err) => {
                 error!("Could not register signal handler: {:?}", err);
