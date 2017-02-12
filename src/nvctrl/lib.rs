@@ -30,14 +30,12 @@ pub struct NvidiaControl {
     limits: (u16, u16)
 }
 
-#[cfg(any(target_os = "linux", target_os="freebsd"))]
 impl Drop for NvidiaControl {
     fn drop(&mut self) {
         NvidiaControl::deinit();
     }
 }
 
-#[cfg(any(target_os = "linux", target_os="freebsd"))]
 impl NvidiaControl {
     pub fn new(lim: Option<(u16, u16)>) -> NvidiaControl {
         let ret = NvidiaControl{
@@ -56,6 +54,10 @@ impl NvidiaControl {
         ret
     }
 
+}
+
+#[cfg(any(target_os = "linux", target_os="freebsd"))]
+impl NvidiaControl {
     fn init() -> i32 {
         let ret = unsafe { nv_init() };
         ret as i32
