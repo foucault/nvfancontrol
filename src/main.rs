@@ -369,7 +369,7 @@ pub fn main() {
         }
     }
 
-    let default_curve = vec![(21, 20), (49, 30), (57, 45), (66, 55),
+    let default_curve = vec![(41, 20), (49, 30), (57, 45), (66, 55),
                              (75, 63), (78, 72), (80, 80)];
 
     let mut curve: Vec<(u16, u16)>;
