@@ -41,26 +41,30 @@ pub struct NvidiaControl {
 
 impl Drop for NvidiaControl {
     fn drop(&mut self) {
-        NvidiaControl::deinit().unwrap();
+        match NvidiaControl::deinit() {
+            Ok(_) => {},
+            Err(_) => {}
+        }
     }
 }
 
 impl NvidiaControl {
-    pub fn new(lim: Option<(u16, u16)>) -> NvidiaControl {
-        let ret = NvidiaControl {
-            limits: match lim {
-                Some((low, high)) => {
-                    if high > 100 {
-                        (low, 100)
-                    } else {
-                        (low, high)
-                    }
-                },
-                None => (0, 100)
-            }
-        };
-        NvidiaControl::init().unwrap();
-        ret
+    pub fn new(lim: Option<(u16, u16)>) -> Result<NvidiaControl, String> {
+        match NvidiaControl::init() {
+            Ok(()) => Ok(NvidiaControl {
+                limits: match lim {
+                    Some((low, high)) => {
+                        if high > 100 {
+                            (low, 100)
+                        } else {
+                            (low, high)
+                        }
+                    },
+                    None => (0, 100)
+                }
+            }),
+            Err(e) => Err(e)
+        }
     }
 
     fn true_speed(&self, speed: i32) -> u16 {

@@ -86,7 +86,7 @@ impl NVFanManager {
             points: Vec<(u16, u16)>, force: bool, limits: Option<(u16, u16)>
         ) -> Result<NVFanManager, String> {
 
-        let ctrl = NvidiaControl::new(limits);
+        let ctrl = try!(NvidiaControl::new(limits));
         let version: f32 = match ctrl.get_version() {
             Ok(v) => {
                 v.parse::<f32>().unwrap()
