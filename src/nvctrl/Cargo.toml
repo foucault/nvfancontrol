@@ -1,11 +1,15 @@
 [package]
 name = "nvctrl"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 build = "build.rs"
 
 [dependencies]
 libc = "*"
+
+[target.'cfg(windows)'.dependencies]
+libloading = "*"
+lazy_static = "*"
 
 [lib]
 name = "nvctrl"

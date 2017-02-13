@@ -1,4 +1,11 @@
 extern crate libc;
+
+#[cfg(target_os="windows")]
+#[macro_use] extern crate lazy_static;
+
+#[cfg(target_os="windows")]
+extern crate libloading;
+
 use std::collections::HashMap;
 
 #[cfg(any(target_os="linux", target_os="freebsd"))]
