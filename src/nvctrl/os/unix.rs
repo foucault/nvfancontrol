@@ -15,6 +15,7 @@ extern {
     fn nv_get_fanspeed_rpm(speed_rpm: *mut c_int) -> c_int;
     fn nv_get_version(ver: *const *mut c_char) -> c_int;
     fn nv_get_utilization(util: *const *mut c_char) -> c_int;
+    fn nv_get_adapter(adapter: *const *mut c_char) -> c_int;
     fn nv_set_ctrl_type(typ: c_int) -> c_int;
 }
 
@@ -92,6 +93,17 @@ impl NvFanController for NvidiaControl {
     fn get_version(&self) -> Result<String, String> {
         let mut v: *mut c_char = unsafe { mem::uninitialized() };
         match unsafe { nv_get_version(&mut v) } {
+            XNV_OK => {
+                assert!(!v.is_null());
+                Ok(unsafe { CStr::from_ptr(v as *const c_char).to_str().unwrap().to_owned() })
+            },
+            i => Err(format!("XNVCtrl get_version() failed; error {}", i))
+        }
+    }
+
+    fn get_adapter(&self) -> Result<String, String> {
+        let mut v: *mut c_char = unsafe { mem::uninitialized() };
+        match unsafe { nv_get_adapter(&mut v) } {
             XNV_OK => {
                 assert!(!v.is_null());
                 Ok(unsafe { CStr::from_ptr(v as *const c_char).to_str().unwrap().to_owned() })

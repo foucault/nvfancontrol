@@ -2,7 +2,7 @@
 
 use libloading::{Library, Symbol};
 
-// use std::ffi::CStr;
+use std::ffi::CStr;
 use std::mem;
 use std::collections::HashMap;
 use libc;
@@ -116,9 +116,9 @@ impl NvAPI_ShortString {
         NvAPI_ShortString { inner: [0 as libc::c_char; NVAPI_SHORT_STRING_MAX] }
     }
 
-    /*fn into_string(&self) -> String {
+    fn into_string(&self) -> String {
         unsafe { CStr::from_ptr(self.inner.as_ptr()).to_str().unwrap().to_owned() }
-    }*/
+    }
 }
 
 #[repr(C)]
@@ -463,6 +463,22 @@ impl NvFanController for NvidiaControl {
         match unsafe { NvAPI_SYS_GetDriverAndBranchVersion(&mut v, &mut b) } {
             0 => Ok(format!("{:.2}", (v as f32)/100.0)),
             i => Err(format!("NvAPI_SYS_GetDriverAndBranchVersion() failed; error {:?}", i))
+        }
+    }
+
+    fn get_adapter(&self) -> Result<String, String> {
+        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
+        let mut count = 0 as u32;
+
+        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
+            0 => {
+                let mut adapter = NvAPI_ShortString::new();
+                match unsafe { NvAPI_GPU_GetFullName(handle[0], &mut adapter) } {
+                    0 => Ok(adapter.into_string()),
+                    i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i))
+                }
+            },
+            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
         }
     }
 

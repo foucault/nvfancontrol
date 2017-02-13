@@ -102,6 +102,12 @@ int nv_get_utilization(char **ptr) {
             NV_CTRL_STRING_GPU_UTILIZATION, ptr);
 }
 
+int nv_get_adapter(char **ptr) {
+    return XNVCTRLQueryTargetStringAttribute(
+            disp, NV_CTRL_TARGET_TYPE_GPU, 0, 0,
+            NV_CTRL_STRING_PRODUCT_NAME, ptr);
+}
+
 /*
  * vim:ts=4:sw=4:et
  */

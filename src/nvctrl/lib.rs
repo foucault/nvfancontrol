@@ -26,6 +26,7 @@ pub trait NvFanController {
     fn get_fanspeed_rpm(&self) -> Result<i32, String>;
     fn set_fanspeed(&self, speed: i32) -> Result<(), String>;
     fn get_version(&self) -> Result<String, String>;
+    fn get_adapter(&self) -> Result<String, String>;
     fn get_utilization(&self) -> Result<HashMap<&str, i32>, String>;
 }
 

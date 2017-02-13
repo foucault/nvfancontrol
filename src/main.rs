@@ -467,8 +467,9 @@ pub fn main() {
         }
     };
 
-    info!("Using NVIDIA driver version {:.2}",
+    info!("NVIDIA driver version: {:.2}",
              mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
+    info!("NVIDIA graphics adapter: {}", mgr.ctrl.get_adapter().unwrap());
 
     let timeout = Duration::new(2, 0);
     RUNNING.store(true, Ordering::Relaxed);
