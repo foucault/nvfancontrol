@@ -14,8 +14,8 @@ use getopts::Options;
 
 extern crate time;
 
-extern crate xdg;
-use xdg::BaseDirectories;
+#[cfg(unix)] extern crate xdg;
+#[cfg(unix)] use xdg::BaseDirectories;
 
 use std::io::{BufReader, BufRead};
 use std::fs::File;
@@ -25,6 +25,7 @@ use std::process;
 use std::time::Duration;
 use std::sync::atomic::{AtomicBool, Ordering, ATOMIC_BOOL_INIT};
 use std::io::Write;
+use std::path::PathBuf;
 
 // http://stackoverflow.com/questions/27588416/how-to-send-output-to-stderr
 macro_rules! errln(
@@ -374,15 +375,33 @@ pub fn main() {
 
     let mut curve: Vec<(u16, u16)>;
 
-    let conf_file = match BaseDirectories::new() {
-        Ok(x) => {
-            x.find_config_file(CONF_FILE)
-        },
-        Err(e) => {
-            error!("Could not find xdg conformant dirs: {}", e);
-            None
+    let conf_file: Option<PathBuf>;
+
+    #[cfg(unix)] {
+        conf_file = match BaseDirectories::new() {
+            Ok(x) => {
+                x.find_config_file(CONF_FILE)
+            },
+            Err(e) => {
+                error!("Could not find xdg conformant dirs: {}", e);
+                None
+            }
+        };
+    }
+
+    #[cfg(windows)] {
+        match env::home_dir() {
+            Some(path) => {
+                let mut conf_path = PathBuf::from(path.to_str().unwrap());
+                conf_path.push(CONF_FILE);
+                conf_file = Some(conf_path);
+            },
+            None => {
+                errln!("Could not find home directory");
+                conf_file = None;
+            }
         }
-    };
+    }
 
     match conf_file {
         Some(path) => {
