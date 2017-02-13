@@ -14,7 +14,13 @@ const NVAPI_MAX_THERMAL_SENSORS_PER_GPU: usize = 3;
 const NVAPI_MAX_COOLERS_PER_GPU: usize = 20;
 const NVAPI_MAX_USAGES_PER_GPU: usize = 33;
 
+#[cfg(target_arch="x86")]
+type QueryPtr = u32;
+#[cfg(target_arch="x86_64")]
+type QueryPtr = u64;
+
 #[allow(dead_code)]
+#[repr(u32)]
 enum QueryCode {
     Initialize = 0x150E828,
     Unload = 0x0D22BDD7E,
@@ -32,14 +38,14 @@ fn NVAPI_VERSION<T>(v: u32) -> u32 {
 #[cfg(target_arch="x86_64")]
 lazy_static! {
     static ref NVAPI: Library = Library::new("C:\\Windows\\System32\\nvapi64.dll").unwrap();
-    static ref NvAPI_QueryInterface: Symbol<'static, unsafe extern "C" fn(u64) -> *const ()> =
+    static ref NvAPI_QueryInterface: Symbol<'static, unsafe extern "C" fn(QueryPtr) -> *const ()> =
         unsafe { NVAPI.get(b"nvapi_QueryInterface").unwrap() };
 }
 
 #[cfg(target_arch="x86")]
 lazy_static! {
     static ref NVAPI: Library = Library::new("C:\\Windows\\System32\\nvapi.dll").unwrap();
-    static ref NvAPI_QueryInterface: Symbol<'static, unsafe extern "C" fn(u32) -> *const ()> =
+    static ref NvAPI_QueryInterface: Symbol<'static, unsafe extern "C" fn(QueryPtr) -> *const ()> =
         unsafe { NVAPI.get(b"nvapi_QueryInterface").unwrap() };
 }
 
@@ -80,7 +86,7 @@ extern {
 unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandle, index: u32, levels: *const NvGpuCoolerLevels) -> libc::c_int {
     let func = mem::transmute::<
         *const (), fn(NvPhysicalGpuHandle, u32, *const NvGpuCoolerLevels) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::SetCoolerLevels as u64));
+    >(NvAPI_QueryInterface(QueryCode::SetCoolerLevels as QueryPtr));
     func(handle, index, levels)
 }
 
@@ -88,7 +94,7 @@ unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandle, index: u32, lev
 unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NvGpuCoolerSettings) -> libc::c_int {
     let func = mem::transmute::<
         *const (), fn(NvPhysicalGpuHandle, u32, *mut NvGpuCoolerSettings) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::GetCoolerSettings as u64));
+    >(NvAPI_QueryInterface(QueryCode::GetCoolerSettings as QueryPtr));
     func(handle, index, settings)
 }
 
@@ -96,7 +102,7 @@ unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandle, index: u32, s
 unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandle, usages: *mut NvGpuUsages) -> libc::c_int {
     let func = mem::transmute::<
         *const (), fn(NvPhysicalGpuHandle, *mut NvGpuUsages) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::GetUsages as u64));
+    >(NvAPI_QueryInterface(QueryCode::GetUsages as QueryPtr));
     func(handle, usages)
 }
 
