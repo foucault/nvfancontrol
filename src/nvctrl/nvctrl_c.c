@@ -102,27 +102,6 @@ int nv_get_utilization(char **ptr) {
             NV_CTRL_STRING_GPU_UTILIZATION, ptr);
 }
 
-/*int main(void) {
-
-    init();
-
-    if(disp == NULL){
-        fprintf(stderr, "Cannot open display");
-        exit(1);
-    }
-
-    char *version[10];
-
-    get_version(&*version);
-
-    printf("%s\n", *version);
-
-    deinit();
-
-    return 0;
-
-}*/
-
 /*
  * vim:ts=4:sw=4:et
  */
