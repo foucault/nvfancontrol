@@ -6,3 +6,4 @@ target/*
 *.la
 *.lo
 *.o
+nvapi*.lib
