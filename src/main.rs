@@ -276,7 +276,7 @@ pub fn main() {
                 let parts: Vec<&str> = res.split(',').collect();
                 if parts.len() == 1 {
                     if parts[0] != "0" {
-                        errln!("Invalid option for \"-l\": {}", parts[0]);
+                        error!("Invalid option for \"-l\": {}", parts[0]);
                         process::exit(1);
                     }
                     else {
@@ -286,7 +286,7 @@ pub fn main() {
                     let lower = match parts[0].parse::<u16>() {
                         Ok(num) => num,
                         Err(e) => {
-                            errln!("Could not parse {} as lower limit: {}",
+                            error!("Could not parse {} as lower limit: {}",
                                    parts[0], e);
                             process::exit(1);
                         }
@@ -294,13 +294,13 @@ pub fn main() {
                     let upper = match parts[1].parse::<u16>() {
                         Ok(num) => num,
                         Err(e) => {
-                            errln!("Could not parse {} as upper limit: {}",
+                            error!("Could not parse {} as upper limit: {}",
                                    parts[1], e);
                             process::exit(1);
                         }
                     };
                     if upper < lower {
-                        errln!("Lower limit {} is greater than the upper {}",
+                        error!("Lower limit {} is greater than the upper {}",
                                lower, upper);
                         process::exit(1);
                     }
@@ -311,12 +311,12 @@ pub fn main() {
                         limits = Some((lower, upper));
                     }
                 } else {
-                    errln!("Invalid argument for \"-l\": {:?}", parts);
+                    error!("Invalid argument for \"-l\": {:?}", parts);
                     process::exit(1);
                 }
             },
             None => {
-                errln!("Option \"-l\" present but no argument provided");
+                error!("Option \"-l\" present but no argument provided");
                 process::exit(1);
             }
         }
@@ -397,7 +397,7 @@ pub fn main() {
                 conf_file = Some(conf_path);
             },
             None => {
-                errln!("Could not find home directory");
+                warn!("Could not find home directory; no config file available");
                 conf_file = None;
             }
         }
@@ -467,7 +467,7 @@ pub fn main() {
         }
     };
 
-    println!("Using NVIDIA driver version {:.2}",
+    info!("Using NVIDIA driver version {:.2}",
              mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
 
     let timeout = Duration::new(2, 0);
@@ -481,7 +481,7 @@ pub fn main() {
         }
 
         match mgr.update() {
-            Err(e) => { errln!("Could not update fan speed: {}", e) },
+            Err(e) => { error!("Could not update fan speed: {}", e) },
             _ => {}
         };
 
