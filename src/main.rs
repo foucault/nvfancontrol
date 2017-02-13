@@ -447,7 +447,7 @@ pub fn main() {
                     }
                 },
                 Err(e) => {
-                    error!("Could not read configuration file {:?}: {}",
+                    warn!("Could not read configuration file {:?}: {}",
                            path, e);
                     curve = default_curve;
                 }
