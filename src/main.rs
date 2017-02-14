@@ -243,6 +243,8 @@ pub fn main() {
         default: 20,80", "LOWER,UPPER");
     opts.optflag("f", "force", "Always use the custom curve even if the fan is
                  already spinning in auto mode");
+    opts.optflag("m", "monitor-only", "Do not update the fan speed and control
+                 mode; just log temperatures and fan speeds");
     opts.optflag("h", "help", "Print this help message");
 
     let matches = match opts.parse(&args[1..]) {
@@ -474,6 +476,11 @@ pub fn main() {
     let timeout = Duration::new(2, 0);
     RUNNING.store(true, Ordering::Relaxed);
 
+    let monitor_only = matches.opt_present("m");
+    if monitor_only {
+        info!("Option \"-m\" is present; curve will have no actual effect");
+    }
+
     // Main loop
     loop {
         if RUNNING.load(Ordering::Relaxed) == false {
@@ -481,10 +488,12 @@ pub fn main() {
             break;
         }
 
-        match mgr.update() {
-            Err(e) => { error!("Could not update fan speed: {}", e) },
-            _ => {}
-        };
+        if !monitor_only {
+            match mgr.update() {
+                Err(e) => { error!("Could not update fan speed: {}", e) },
+                _ => {}
+            };
+        }
 
         let graphics_util = match mgr.ctrl.get_utilization().unwrap().get("graphics") {
             Some(v) => *v,
