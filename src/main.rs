@@ -264,12 +264,7 @@ pub fn main() {
         log_level = LogLevelFilter::Info;
     }
 
-    let force_update: bool;
-    if matches.opt_present("f") {
-        force_update = true
-    } else {
-        force_update = false
-    }
+    let force_update = matches.opt_present("f");
 
     let limits: Option<(u16, u16)>;
     if matches.opt_present("l") {
