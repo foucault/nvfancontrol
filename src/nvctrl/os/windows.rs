@@ -5,6 +5,7 @@ use libloading::{Library, Symbol};
 use std::ffi::CStr;
 use std::mem;
 use std::collections::HashMap;
+use std::env;
 use libc;
 use ::{NVCtrlFanControlState, NvFanController, NvidiaControl};
 
@@ -14,10 +15,11 @@ const NVAPI_MAX_THERMAL_SENSORS_PER_GPU: usize = 3;
 const NVAPI_MAX_COOLERS_PER_GPU: usize = 20;
 const NVAPI_MAX_USAGES_PER_GPU: usize = 33;
 
-#[cfg(target_arch="x86")]
-type QueryPtr = u32;
-#[cfg(target_arch="x86_64")]
-type QueryPtr = u64;
+#[cfg(target_arch="x86")] type QueryPtr = u32;
+#[cfg(target_arch="x86")] const NVAPI_DLL: &'static str = "nvapi.dll";
+
+#[cfg(target_arch="x86_64")] type QueryPtr = u64;
+#[cfg(target_arch="x86_64")] const NVAPI_DLL: &'static str = "nvapi64.dll";
 
 #[allow(dead_code)]
 #[repr(u32)]
@@ -35,16 +37,12 @@ fn NVAPI_VERSION<T>(v: u32) -> u32 {
     (size | v<<16) as u32
 }
 
-#[cfg(target_arch="x86_64")]
 lazy_static! {
-    static ref NVAPI: Library = Library::new("C:\\Windows\\System32\\nvapi64.dll").unwrap();
-    static ref NvAPI_QueryInterface: Symbol<'static, unsafe extern "C" fn(QueryPtr) -> *const ()> =
-        unsafe { NVAPI.get(b"nvapi_QueryInterface").unwrap() };
-}
-
-#[cfg(target_arch="x86")]
-lazy_static! {
-    static ref NVAPI: Library = Library::new("C:\\Windows\\System32\\nvapi.dll").unwrap();
+    static ref NVAPI: Library = {
+        let system_root = env::var("SystemRoot").unwrap_or(String::from("C:\\Windows"));
+        let nvapi_path = format!("{}\\System32\\{}", system_root, NVAPI_DLL);
+        Library::new(nvapi_path).unwrap()
+    };
     static ref NvAPI_QueryInterface: Symbol<'static, unsafe extern "C" fn(QueryPtr) -> *const ()> =
         unsafe { NVAPI.get(b"nvapi_QueryInterface").unwrap() };
 }
