@@ -43,8 +43,7 @@ pub struct NvidiaControl {
 impl Drop for NvidiaControl {
     fn drop(&mut self) {
         match NvidiaControl::deinit() {
-            Ok(_) => {},
-            Err(_) => {}
+            Ok(_) | Err(_) => {},
         }
     }
 }

@@ -357,8 +357,7 @@ impl NvFanController for NvidiaControl {
                 match unsafe { NvAPI_GPU_GetCoolerSettings(handle[0], 0, &mut cooler_settings) } {
                     0 => {
                         match cooler_settings.coolers[0].current_policy {
-                            0x20 => { return Ok(NVCtrlFanControlState::Auto); },
-                            0x10 => { return Ok(NVCtrlFanControlState::Auto); },
+                            0x20 | 0x10 => { return Ok(NVCtrlFanControlState::Auto); },
                             0x01 => { return Ok(NVCtrlFanControlState::Manual); },
                             i => { return Err(format!("NvAPI_GPU_GetCoolerSettings() unknown policy: {}", i)) }
                         };
