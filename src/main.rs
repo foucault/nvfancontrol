@@ -410,7 +410,7 @@ pub fn main() {
                     for raw_line in BufReader::new(file).lines() {
                         let line = raw_line.unwrap();
                         let trimmed = line.trim();
-                        if trimmed.starts_with("#") {
+                        if trimmed.starts_with('#') {
                             continue;
                         }
 
