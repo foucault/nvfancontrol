@@ -7,3 +7,4 @@ target/*
 *.lo
 *.o
 nvapi*.lib
+src/nvctrl/target/*
