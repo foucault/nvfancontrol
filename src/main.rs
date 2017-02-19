@@ -337,7 +337,6 @@ fn curve_from_conf(path: PathBuf) -> Result<Vec<(u16,u16)>, String> {
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
-    let program = args[0].clone();
     let mut opts = Options::new();
 
     opts.optflag("d", "debug", "Enable debug messages");
@@ -356,7 +355,7 @@ pub fn main() {
     };
 
     if matches.opt_present("h") {
-        print_usage(&program, opts);
+        print_usage(&args[0].clone(), opts);
         return;
     }
 
