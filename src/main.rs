@@ -478,7 +478,7 @@ pub fn main() {
 
     // Main loop
     loop {
-        if RUNNING.load(Ordering::Relaxed) == false {
+        if !RUNNING.load(Ordering::Relaxed) {
             debug!("Exiting");
             break;
         }
