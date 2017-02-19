@@ -250,6 +250,11 @@ pub fn main() {
         LogLevelFilter::Info
     };
 
+    match Logger::new(log_level) {
+        Ok(v) => v,
+        Err(err) => panic!("Could not start logger: {:?}", err)
+    };
+
     let force_update = matches.opt_present("f");
 
     let limits: Option<(u16, u16)>;
@@ -307,11 +312,6 @@ pub fn main() {
         // Default limits
         limits = Some((20, 80));
     }
-
-    match Logger::new(log_level) {
-        Ok(v) => v,
-        Err(err) => panic!("Could not start logger: {:?}", err)
-    };
 
 
     #[cfg(unix)] {
