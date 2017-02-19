@@ -318,29 +318,15 @@ pub fn main() {
         let sigaction = signal::SigAction::new(signal::SigHandler::Handler(sigint),
                                                signal::SaFlags::empty(),
                                                signal::SigSet::empty());
-        match unsafe { signal::sigaction(signal::SIGINT, &sigaction) } {
-            Ok(_) => {} ,
-            Err(err) => {
-                error!("Could not register SIGINT handler: {:?}", err);
-                process::exit(1);
-            }
-        };
-
-        match unsafe { signal::sigaction(signal::SIGTERM, &sigaction) } {
-            Ok(_) => {} ,
-            Err(err) => {
-                error!("Could not register SIGTERM handler: {:?}", err);
-                process::exit(1);
-            }
-        };
-
-        match unsafe { signal::sigaction(signal::SIGQUIT, &sigaction) } {
-            Ok(_) => {} ,
-            Err(err) => {
-                error!("Could not register SIGQUIT handler: {:?}", err);
-                process::exit(1);
-            }
-        };
+        for &sig in &[signal::SIGINT, signal::SIGTERM, signal::SIGQUIT] {
+            match unsafe { signal::sigaction(sig, &sigaction) } {
+                Ok(_) => {} ,
+                Err(err) => {
+                    error!("Could not register SIG #{:?} handler: {:?}", sig ,err);
+                    process::exit(1);
+                }
+            };
+        }
     }
 
     #[cfg(windows)] {
