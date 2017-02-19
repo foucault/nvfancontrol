@@ -218,6 +218,43 @@ fn print_usage(program: &str, opts: Options) {
     println!("{}", opts.usage(&brief));
 }
 
+fn make_limits(res: String) -> Result<Option<(u16,u16)>, String> {
+    let parts: Vec<&str> = res.split(',').collect();
+    if parts.len() == 1 {
+        if parts[0] != "0" {
+            Err(format!("Invalid option for \"-l\": {}", parts[0]))
+        } else {
+            Ok(None)
+        }
+    } else if parts.len() == 2 {
+        let lower = match parts[0].parse::<u16>() {
+            Ok(num) => num,
+            Err(e) => {
+                return Err(format!("Could not parse {} as lower limit: {}", parts[0], e));
+            }
+        };
+        let upper = match parts[1].parse::<u16>() {
+            Ok(num) => num,
+            Err(e) => {
+                return Err(format!("Could not parse {} as upper limit: {}", parts[1], e));
+            }
+        };
+
+        if upper < lower {
+            return Err(format!("Lower limit {} is greater than the upper {}", lower, upper));
+        }
+
+        if upper > 100 {
+            debug!("Upper limit {} is > 100; clipping to 100", upper);
+            Ok(Some((lower, 100)))
+        } else {
+            Ok(Some((lower, upper)))
+        }
+    } else {
+        Err(format!("Invalid argument for \"-l\": {:?}", parts))
+    }
+}
+
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -261,46 +298,12 @@ pub fn main() {
     if matches.opt_present("l") {
         match matches.opt_str("l") {
             Some(res) => {
-                let parts: Vec<&str> = res.split(',').collect();
-                if parts.len() == 1 {
-                    if parts[0] != "0" {
-                        error!("Invalid option for \"-l\": {}", parts[0]);
+                match make_limits(res) {
+                    Ok(lims) => { limits = lims },
+                    Err(e) => {
+                        error!("{}", e);
                         process::exit(1);
                     }
-                    else {
-                        limits = None;
-                    }
-                } else if parts.len() == 2 {
-                    let lower = match parts[0].parse::<u16>() {
-                        Ok(num) => num,
-                        Err(e) => {
-                            error!("Could not parse {} as lower limit: {}",
-                                   parts[0], e);
-                            process::exit(1);
-                        }
-                    };
-                    let upper = match parts[1].parse::<u16>() {
-                        Ok(num) => num,
-                        Err(e) => {
-                            error!("Could not parse {} as upper limit: {}",
-                                   parts[1], e);
-                            process::exit(1);
-                        }
-                    };
-                    if upper < lower {
-                        error!("Lower limit {} is greater than the upper {}",
-                               lower, upper);
-                        process::exit(1);
-                    }
-                    if upper > 100 {
-                        debug!("Upper limit {} is > 100; clipping to 100", upper);
-                        limits = Some((lower, 100));
-                    } else {
-                        limits = Some((lower, upper));
-                    }
-                } else {
-                    error!("Invalid argument for \"-l\": {:?}", parts);
-                    process::exit(1);
                 }
             },
             None => {
