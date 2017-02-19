@@ -384,7 +384,7 @@ impl NvFanController for NvidiaControl {
                 let mut levels = NvGpuCoolerLevels::new();
                 levels.set_policy(0, policy as i32);
                 levels.set_level(0, fanspeed);
-                match unsafe { NvAPI_GPU_SetCoolerLevels(handle[0], 0, &mut levels) } {
+                match unsafe { NvAPI_GPU_SetCoolerLevels(handle[0], 0, &levels) } {
                     0 => { Ok(()) },
                     i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
                 }
@@ -442,7 +442,7 @@ impl NvFanController for NvidiaControl {
                 let mut levels = NvGpuCoolerLevels::new();
                 levels.set_policy(0, policy);
                 levels.set_level(0, true_speed as i32);
-                match unsafe { NvAPI_GPU_SetCoolerLevels(handle[0], 0, &mut levels) } {
+                match unsafe { NvAPI_GPU_SetCoolerLevels(handle[0], 0, &levels) } {
                     0 => {},
                     i => { return Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)); }
                 }
