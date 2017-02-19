@@ -121,7 +121,7 @@ impl NvFanController for NvidiaControl {
                 let mut ret: HashMap<&str, i32> = HashMap::with_capacity(4);
                 let parts = res.split(", ");
                 for s in parts {
-                    let mut split_parts = s.split("=");
+                    let mut split_parts = s.split('=');
                     let key = split_parts.next().unwrap();
                     let val = split_parts.next().unwrap();
                     ret.insert(key, val.parse::<i32>().unwrap());
