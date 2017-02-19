@@ -255,6 +255,85 @@ fn make_limits(res: String) -> Result<Option<(u16,u16)>, String> {
     }
 }
 
+#[cfg(unix)]
+fn find_config_file() -> Option<PathBuf> {
+    match BaseDirectories::new() {
+        Ok(x) => {
+            x.find_config_file(CONF_FILE)
+        },
+        Err(e) => {
+            warn!("Could not find xdg conformant dirs: {}", e);
+            None
+        }
+    }
+}
+
+#[cfg(windows)]
+fn find_config_file() -> Option<PathBuf> {
+    match env::home_dir() {
+        Some(path) => {
+            let mut conf_path = PathBuf::from(path.to_str().unwrap());
+            conf_path.push(CONF_FILE);
+            Some(conf_path)
+        },
+        None => {
+            warn!("Could not find home directory; no config file available");
+            None
+        }
+    }
+}
+
+fn curve_from_conf(path: PathBuf) -> Result<Vec<(u16,u16)>, String> {
+
+    let mut curve: Vec<(u16, u16)>;
+
+    match File::open(path.to_str().unwrap()) {
+        Ok(file) => {
+            curve = Vec::new();
+
+            for raw_line in BufReader::new(file).lines() {
+                let line = raw_line.unwrap();
+                let trimmed = line.trim();
+                if trimmed.starts_with('#') {
+                    continue;
+                }
+
+                let parts = trimmed.split_whitespace()
+                                   .collect::<Vec<&str>>();
+
+                if parts.len() < 2 {
+                    warn!("Invalid line \"{}\", ignoring", line);
+                    continue
+                }
+
+                let x = match parts[0].parse::<u16>() {
+                    Ok(val) => val,
+                    Err(e) => {
+                        warn!("Could not parse value {}: {}, ignoring",
+                               parts[0], e);
+                        continue;
+                    }
+                };
+
+                let y = match parts[1].parse::<u16>() {
+                    Ok(val) => val,
+                    Err(e) => {
+                        warn!("Could not parse value {}: {}, ignoring",
+                               parts[1], e);
+                        continue;
+                    }
+                };
+
+                curve.push((x, y));
+            }
+            Ok(curve)
+        },
+        Err(e) => Err(format!("Could not read configuration file {:?}: {}",
+                      path, e))
+    }
+
+}
+
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -345,89 +424,19 @@ pub fn main() {
     let default_curve = vec![(41, 20), (49, 30), (57, 45), (66, 55),
                              (75, 63), (78, 72), (80, 80)];
 
-    let mut curve: Vec<(u16, u16)>;
-
-    let conf_file: Option<PathBuf>;
-
-    #[cfg(unix)] {
-        conf_file = match BaseDirectories::new() {
-            Ok(x) => {
-                x.find_config_file(CONF_FILE)
-            },
-            Err(e) => {
-                error!("Could not find xdg conformant dirs: {}", e);
-                None
-            }
-        };
-    }
-
-    #[cfg(windows)] {
-        match env::home_dir() {
-            Some(path) => {
-                let mut conf_path = PathBuf::from(path.to_str().unwrap());
-                conf_path.push(CONF_FILE);
-                conf_file = Some(conf_path);
-            },
-            None => {
-                warn!("Could not find home directory; no config file available");
-                conf_file = None;
-            }
-        }
-    }
-
-    match conf_file {
+    let curve: Vec<(u16, u16)> = match find_config_file() {
         Some(path) => {
-
-            match File::open(path.to_str().unwrap()) {
-                Ok(file) => {
-                    curve = Vec::new();
-
-                    for raw_line in BufReader::new(file).lines() {
-                        let line = raw_line.unwrap();
-                        let trimmed = line.trim();
-                        if trimmed.starts_with('#') {
-                            continue;
-                        }
-
-                        let parts = trimmed.split_whitespace()
-                                           .collect::<Vec<&str>>();
-
-                        if parts.len() < 2 {
-                            debug!("Invalid line, continuing");
-                            continue
-                        }
-
-                        let x = match parts[0].parse::<u16>() {
-                            Ok(val) => val,
-                            Err(e) => {
-                                debug!("Could not parse value {}: {}, ignoring",
-                                       parts[0], e);
-                                continue;
-                            }
-                        };
-
-                        let y = match parts[1].parse::<u16>() {
-                            Ok(val) => val,
-                            Err(e) => {
-                                debug!("Could not parse value {}: {}, ignoring",
-                                       parts[1], e);
-                                continue;
-                            }
-                        };
-
-                        curve.push((x, y));
-                    }
-                },
+            match curve_from_conf(path) {
+                Ok(c) => c,
                 Err(e) => {
-                    warn!("Could not read configuration file {:?}: {}",
-                           path, e);
-                    curve = default_curve;
+                    warn!("{}; using default curve", e);
+                    default_curve
                 }
-            };
-
+            }
         },
         None => {
-            curve = default_curve;
+            warn!("No config file found; using default curve");
+            default_curve
         }
     };
 
