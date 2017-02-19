@@ -114,7 +114,7 @@ impl NvAPI_ShortString {
         NvAPI_ShortString { inner: [0 as libc::c_char; NVAPI_SHORT_STRING_MAX] }
     }
 
-    fn into_string(&self) -> String {
+    fn to_string(&self) -> String {
         unsafe { CStr::from_ptr(self.inner.as_ptr()).to_str().unwrap().to_owned() }
     }
 }
@@ -471,7 +471,7 @@ impl NvFanController for NvidiaControl {
             0 => {
                 let mut adapter = NvAPI_ShortString::new();
                 match unsafe { NvAPI_GPU_GetFullName(handle[0], &mut adapter) } {
-                    0 => Ok(adapter.into_string()),
+                    0 => Ok(adapter.to_string()),
                     i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i))
                 }
             },
