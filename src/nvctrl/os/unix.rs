@@ -91,8 +91,8 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_version(&self) -> Result<String, String> {
-        let mut v: *mut c_char = unsafe { mem::uninitialized() };
-        match unsafe { nv_get_version(&mut v) } {
+        let v: *mut c_char = unsafe { mem::uninitialized() };
+        match unsafe { nv_get_version(&v) } {
             XNV_OK => {
                 assert!(!v.is_null());
                 Ok(unsafe { CStr::from_ptr(v as *const c_char).to_str().unwrap().to_owned() })
@@ -102,8 +102,8 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_adapter(&self) -> Result<String, String> {
-        let mut v: *mut c_char = unsafe { mem::uninitialized() };
-        match unsafe { nv_get_adapter(&mut v) } {
+        let v: *mut c_char = unsafe { mem::uninitialized() };
+        match unsafe { nv_get_adapter(&v) } {
             XNV_OK => {
                 assert!(!v.is_null());
                 Ok(unsafe { CStr::from_ptr(v as *const c_char).to_str().unwrap().to_owned() })
@@ -113,8 +113,8 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_utilization(&self) -> Result<HashMap<&str, i32>, String> {
-        let mut v: *mut c_char = unsafe { mem::uninitialized() };
-        match unsafe { nv_get_utilization(&mut v) } {
+        let v: *mut c_char = unsafe { mem::uninitialized() };
+        match unsafe { nv_get_utilization(&v) } {
             XNV_OK => {
                 assert!(!v.is_null());
                 let res = unsafe { CStr::from_ptr(v as *const c_char).to_str().unwrap() };
