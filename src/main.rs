@@ -142,12 +142,9 @@ impl NVFanManager {
         let plast = self.points.last().unwrap();
 
         if rpm > 0 && !self.force {
-            match ctrl_status {
-                NVCtrlFanControlState::Auto => {
-                    debug!("Fan is enabled on auto control; doing nothing");
-                    return Ok(());
-                },
-                _ => {}
+            if let NVCtrlFanControlState::Auto = ctrl_status {
+                debug!("Fan is enabled on auto control; doing nothing");
+                return Ok(());
             };
         }
 
@@ -160,10 +157,7 @@ impl NVFanManager {
             // if utilization can't be retrieved the utilization leg is
             // always false and ignored
             if dif < 240.0 || gutil.unwrap_or(&-1) > &25 {
-                match self.set_fan(pfirst.1 as i32) {
-                    Err(e) => { return Err(e); }
-                    _ => {}
-                }
+                if let Err(e) = self.set_fan(pfirst.1 as i32) { return Err(e); }
             } else {
                 debug!("Grace period expired; turning fan off");
                 self.on_time = None;
@@ -173,10 +167,9 @@ impl NVFanManager {
 
         if temp > plast.0 {
             debug!("Temperature outside curve; setting to max");
-            match self.set_fan(plast.1 as i32) {
-                Err(e) => { return Err(e); }
-                _ => {}
-            }
+
+            if let Err(e) = self.set_fan(plast.1 as i32) { return Err(e); }
+
             return Ok(());
         }
 
@@ -193,10 +186,7 @@ impl NVFanManager {
                 let y = (p1.1 as f32) + (((temp - p1.0) as f32) * slope);
 
                 self.on_time = Some(time::precise_time_s());
-                match self.set_fan(y as i32) {
-                    Err(e) => { return Err(e); }
-                    _ => {}
-                }
+                if let Err(e) = self.set_fan(y as i32) { return Err(e); }
 
                 return Ok(());
             }
@@ -204,10 +194,7 @@ impl NVFanManager {
 
         // If no point is found then fan should be off
         self.on_time = None;
-        match self.reset_fan() {
-            Err(e) => { return Err(e); }
-            _ => {}
-        }
+        if let Err(e) = self.reset_fan() { return Err(e); }
 
         Ok(())
 
@@ -257,12 +244,11 @@ pub fn main() {
         return;
     }
 
-    let log_level: LogLevelFilter;
-    if matches.opt_present("d") {
-        log_level = LogLevelFilter::Debug;
+    let log_level = if matches.opt_present("d") {
+        LogLevelFilter::Debug
     } else {
-        log_level = LogLevelFilter::Info;
-    }
+        LogLevelFilter::Info
+    };
 
     let force_update = matches.opt_present("f");
 
@@ -484,9 +470,8 @@ pub fn main() {
         }
 
         if !monitor_only {
-            match mgr.update() {
-                Err(e) => { error!("Could not update fan speed: {}", e) },
-                _ => {}
+            if let Err(e) = mgr.update() {
+                error!("Could not update fan speed: {}", e)
             };
         }
 
