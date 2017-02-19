@@ -103,7 +103,7 @@ impl NVFanManager {
         }
 
         if points.len() < 2 {
-            return Err(format!("Need at least two points for the curve"));
+            return Err(String::from("Need at least two points for the curve"));
         };
 
         debug!("Curve points: {:?}", points);
