@@ -215,6 +215,33 @@ fn sigint() {
     RUNNING.store(false, Ordering::Relaxed);
 }
 
+#[cfg(unix)]
+fn register_signal_handlers() -> Result<(), String> {
+    let sigaction = signal::SigAction::new(signal::SigHandler::Handler(sigint),
+                                           signal::SaFlags::empty(),
+                                           signal::SigSet::empty());
+    for &sig in &[signal::SIGINT, signal::SIGTERM, signal::SIGQUIT] {
+        match unsafe { signal::sigaction(sig, &sigaction) } {
+            Ok(_) => {} ,
+            Err(err) => {
+                return Err(format!("Could not register SIG #{:?} handler: {:?}",
+                                   sig ,err));
+            }
+        };
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn register_signal_handlers() -> Result<(), String> {
+    match ctrlc::set_handler(sigint) {
+        Ok(_) => { Ok(()) } ,
+        Err(err) => {
+            Err(format!("Could not register signal handler: {:?}", err))
+        }
+    }
+}
+
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options]", program);
     println!("{}", opts.usage(&brief));
@@ -396,29 +423,11 @@ pub fn main() {
         limits = Some((20, 80));
     }
 
-
-    #[cfg(unix)] {
-        let sigaction = signal::SigAction::new(signal::SigHandler::Handler(sigint),
-                                               signal::SaFlags::empty(),
-                                               signal::SigSet::empty());
-        for &sig in &[signal::SIGINT, signal::SIGTERM, signal::SIGQUIT] {
-            match unsafe { signal::sigaction(sig, &sigaction) } {
-                Ok(_) => {} ,
-                Err(err) => {
-                    error!("Could not register SIG #{:?} handler: {:?}", sig ,err);
-                    process::exit(1);
-                }
-            };
-        }
-    }
-
-    #[cfg(windows)] {
-        match ctrlc::set_handler(sigint) {
-            Ok(_) => {} ,
-            Err(err) => {
-                error!("Could not register signal handler: {:?}", err);
-                process::exit(1);
-            }
+    match register_signal_handlers() {
+        Ok(_) => {},
+        Err(e) => {
+            error!("{}", e);
+            process::exit(1);
         }
     }
 
