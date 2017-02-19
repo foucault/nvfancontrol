@@ -39,6 +39,8 @@ macro_rules! errln(
 
 const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
+const DEFAULT_CURVE: [(u16, u16); 7] = [(41, 20), (49, 30), (57, 45), (66, 55),
+                                        (75, 63), (78, 72), (80, 80)];
 
 static RUNNING: AtomicBool = ATOMIC_BOOL_INIT;
 
@@ -420,22 +422,19 @@ pub fn main() {
         }
     }
 
-    let default_curve = vec![(41, 20), (49, 30), (57, 45), (66, 55),
-                             (75, 63), (78, 72), (80, 80)];
-
     let curve: Vec<(u16, u16)> = match find_config_file() {
         Some(path) => {
             match curve_from_conf(path) {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("{}; using default curve", e);
-                    default_curve
+                    DEFAULT_CURVE.to_vec()
                 }
             }
         },
         None => {
             warn!("No config file found; using default curve");
-            default_curve
+            DEFAULT_CURVE.to_vec()
         }
     };
 
