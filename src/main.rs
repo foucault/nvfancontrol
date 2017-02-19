@@ -104,10 +104,6 @@ impl NVFanManager {
             return Err(err);
         }
 
-        if points.len() < 2 {
-            return Err(String::from("Need at least two points for the curve"));
-        };
-
         debug!("Curve points: {:?}", points);
 
         let ret = NVFanManager {
@@ -355,7 +351,12 @@ fn curve_from_conf(path: PathBuf) -> Result<Vec<(u16,u16)>, String> {
 
                 curve.push((x, y));
             }
-            Ok(curve)
+            if curve.len() < 2 {
+                Err(String::from("At least two points are required for \
+                                 the curve"))
+            } else {
+                Ok(curve)
+            }
         },
         Err(e) => Err(format!("Could not read configuration file {:?}: {}",
                       path, e))
