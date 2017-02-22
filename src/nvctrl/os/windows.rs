@@ -7,7 +7,7 @@ use std::mem;
 use std::collections::HashMap;
 use std::env;
 use libc;
-use ::{NVCtrlFanControlState, NvFanController, NvidiaControl};
+use ::{NVCtrlFanControlState, NvFanController};
 
 const NVAPI_SHORT_STRING_MAX: usize = 64;
 const NVAPI_MAX_PHYSICAL_GPUS: usize = 64;
@@ -315,20 +315,31 @@ fn mode_to_policy(state: NVCtrlFanControlState) -> u32 {
     }
 }
 
-impl NvFanController for NvidiaControl {
-    fn init() -> Result<(), String> {
+pub struct NvidiaControl {
+    pub limits: (u16, u16)
+}
+
+impl NvidiaControl {
+    pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
-            0 => Ok(()),
+            0 => Ok(
+                NvidiaControl {
+                    limits: lim
+                }
+            ),
             i => Err(format!("NvAPI_Initialize() failed; error: {}", i))
         }
     }
 
-    fn deinit() -> Result<(), String> {
-        match unsafe { NvAPI_Unload() } {
-            0 => Ok(()),
-            i => Err(format!("NvAPI_Unload() failed; error {}", i))
-        }
+}
+
+impl Drop for NvidiaControl {
+    fn drop(&mut self) {
+        unsafe { NvAPI_Unload() };
     }
+}
+
+impl NvFanController for NvidiaControl {
 
     fn get_temp(&self) -> Result<i32, String> {
         let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];

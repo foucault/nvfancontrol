@@ -2,7 +2,7 @@ use libc::{c_int, c_char};
 use std::collections::HashMap;
 use std::mem;
 use std::ffi::CStr;
-use ::{NVCtrlFanControlState, NvFanController, NvidiaControl};
+use ::{NVCtrlFanControlState, NvFanController};
 
 #[link(name="nvctrl_c")]
 extern {
@@ -21,20 +21,30 @@ extern {
 
 const XNV_OK: i32 = 1;
 
-impl NvFanController for NvidiaControl {
-    fn init() -> Result<(), String> {
+pub struct NvidiaControl {
+    pub limits: (u16, u16)
+}
+
+impl NvidiaControl {
+    pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { nv_init() } {
-            XNV_OK => Ok(()),
+            XNV_OK => Ok(
+                NvidiaControl {
+                    limits: lim
+                }
+            ),
             i => Err(format!("XNVCtrl init() failed; error: {}", i))
         }
     }
+}
 
-    fn deinit() -> Result<(), String> {
-        match unsafe { nv_deinit() } {
-            XNV_OK => Ok(()),
-            i => Err(format!("XNVCtrl deinit() failed; error {}", i))
-        }
+impl Drop for NvidiaControl {
+    fn drop(&mut self) {
+        unsafe { nv_deinit() };
     }
+}
+
+impl NvFanController for NvidiaControl {
 
     fn get_temp(&self) -> Result<i32, String> {
         let mut tmp = -1 as i32;

@@ -17,8 +17,6 @@ pub use self::os::windows::*;
 pub mod os;
 
 pub trait NvFanController {
-    fn init() -> Result<(), String>;
-    fn deinit() -> Result<(), String>;
     fn get_temp(&self) -> Result<i32, String>;
     fn get_ctrl_status(&self) -> Result<NVCtrlFanControlState, String>;
     fn set_ctrl_type(&self, NVCtrlFanControlState) -> Result<(), String>;
@@ -36,35 +34,20 @@ pub enum NVCtrlFanControlState {
     Manual
 }
 
-pub struct NvidiaControl {
-    limits: (u16, u16)
-}
-
-impl Drop for NvidiaControl {
-    fn drop(&mut self) {
-        match NvidiaControl::deinit() {
-            Ok(_) | Err(_) => {},
-        }
-    }
-}
-
 impl NvidiaControl {
     pub fn new(lim: Option<(u16, u16)>) -> Result<NvidiaControl, String> {
-        match NvidiaControl::init() {
-            Ok(()) => Ok(NvidiaControl {
-                limits: match lim {
-                    Some((low, high)) => {
-                        if high > 100 {
-                            (low, 100)
-                        } else {
-                            (low, high)
-                        }
-                    },
-                    None => (0, 100)
+        let limits = match lim {
+            Some((low, high)) => {
+                if high > 100 {
+                    (low, 100)
+                } else {
+                    (low, high)
                 }
-            }),
-            Err(e) => Err(e)
-        }
+            },
+            None => (0, 100)
+        };
+
+        NvidiaControl::init(limits)
     }
 
     fn true_speed(&self, speed: i32) -> u16 {
