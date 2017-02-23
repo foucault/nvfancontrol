@@ -60,6 +60,23 @@ tool expects the libraries installed in `/usr/lib` or `/usr/local/lib`. In case
 you have libraries installed in different locations export them using the
 `LIBRARY_PATH` environment variable.
 
+### Enable Coolbits (Linux only)
+
+For Linux ensure that Coolbits is enabled from your X11 server settings. To
+do so create a file named `20-nvidia.conf` within `/etc/X11/xorg.conf.d/`
+containing the following
+
+    Section "Device"
+        Identifier "Device 0"
+        Driver     "nvidia"
+        VendorName "NVIDIA Corporation"
+        BoardName  "IDENTIFIER FOR YOUR GPU"
+        Option     "Coolbits" "4"
+    EndSection
+
+The important bit is the `Coolbits` option. Valid Coolbits values for dynamic
+fan control are `4`, `5` and `12`. A sample configuration file is provided.
+
 ### Use and configure
 
 To run the program just execute the `nvfancontrol` binary. Add the `-d` or
