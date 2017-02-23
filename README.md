@@ -28,34 +28,37 @@ build the project from source read along.
 #### Prerequisites for Linux
 
 You will need:
-* the Rust compiler toolchain, stable >=1.1 or nightly
-* static version of libXNVCtrl installed at /usr/lib (`libxnvctrl-dev` package
-on Debian/Ubuntu)
-* Xlib (`libx11-xcb-dev` package on Debian/Ubuntu)
-* Xext (`libxext-dev` package on Debian/Ubuntu)
 
-If `libXNVCtrl.a` is installed in a different directory edit
-`src/nvctrl/Makefile` to point to the correct path. Since XNVCtrl supports
-FreeBSD in addition to Linux these instructions should also work for FreeBSD
-with GNU make and a recent gcc without further modifications. However
-nvfancontrol is completely untested on FreeBSD (bug reports are welcome).
+* the Rust compiler toolchain, stable >=1.1 or nightly (build)
+* XNVCtrl; static (build only)
+* Xlib (build and runtime)
+* Xext (build and runtime)
+
+Since XNVCtrl supports FreeBSD in addition to Linux these instructions should
+also work for FreeBSD without further modifications. However nvfancontrol is
+completely untested on FreeBSD (bug reports are welcome).
 
 #### Prerequisites for Windows
 
 You will need:
+
 * the Rust compiler toolchain, stable >=1.10 or nightly. Be adviced that you
 need the **MSVC ABI** version of the toolchain not GNU. In order to target the
 MSVC ABI for Rust you will also need the [Visual C++ build
 tools](http://landinghub.visualstudio.com/visual-cpp-build-tools) package. If
 you are using [rustup](https://www.rustup.rs/) (which you should) you will be
-warned about this
+warned about this (build only)
 * the [NVAPI libraries](https://developer.nvidia.com/nvapi). Depending
 on which version you are building (x86, x64 or both) place `nvapi.lib`,
 `nvapi64.lib` or both in the root of the repository. As `nvapi` is linked
 statically there are no runtime dependencies apart from the NVidia driver
+(build only)
 
-For both platforms run `cargo build --release`. Upon successful compilation
-the executable can be found in `target/release/nvfancontrol`.
+For both platforms run `cargo build --release`. Upon successful compilation the
+executable can be found in `target/release/nvfancontrol`. On Linux the build
+tool expects the libraries installed in `/usr/lib` or `/usr/local/lib`. In case
+you have libraries installed in different locations export them using the
+`LIBRARY_PATH` environment variable.
 
 ### Use and configure
 
