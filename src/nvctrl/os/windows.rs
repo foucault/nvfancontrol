@@ -213,11 +213,25 @@ impl NV_GPU_THERMAL_SETTINGS_V2 {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
+#[allow(non_snake_case)]
+#[allow(dead_code)]
+enum NV_COOLER_POLICY {
+    NONE = 0,
+    MANUAL = 1,
+    PERF = 2,
+    DISCRETE = 4,
+    CONTINUOUS_HW = 8,
+    CONTINUOUS_SW = 16,
+    DEFAULT = 32,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(non_snake_case)]
 struct NvLevel {
     level: i32,
-    policy: i32
+    policy: NV_COOLER_POLICY
 }
 
 #[repr(C)]
@@ -231,7 +245,8 @@ impl NvGpuCoolerLevels {
     fn new() -> NvGpuCoolerLevels {
         NvGpuCoolerLevels {
             version: NVAPI_VERSION::<NvGpuCoolerLevels>(1u32),
-            coolers: [NvLevel { level: -1, policy: -1 }; NVAPI_MAX_COOLERS_PER_GPU]
+            coolers: [NvLevel { level: -1, policy: NV_COOLER_POLICY::NONE };
+                        NVAPI_MAX_COOLERS_PER_GPU]
         }
     }
 
@@ -239,7 +254,7 @@ impl NvGpuCoolerLevels {
         self.coolers[index as usize].level = level;
     }
 
-    fn set_policy(&mut self, index: u32, policy: i32) {
+    fn set_policy(&mut self, index: u32, policy: NV_COOLER_POLICY) {
         self.coolers[index as usize].policy = policy;
     }
 }
@@ -255,8 +270,8 @@ struct NvCooler {
     current_min: i32,
     current_max: i32,
     current_level: i32,
-    default_policy: i32,
-    current_policy: i32,
+    default_policy: NV_COOLER_POLICY,
+    current_policy: NV_COOLER_POLICY,
     target: i32,
     control_type: i32,
     active: i32,
@@ -282,8 +297,8 @@ impl NvGpuCoolerSettings {
                 current_min: -1,
                 current_max: -1,
                 current_level: -1,
-                default_policy: -1,
-                current_policy: -1,
+                default_policy: NV_COOLER_POLICY::NONE,
+                current_policy: NV_COOLER_POLICY::NONE,
                 target: -1,
                 control_type: -1,
                 active: -1
@@ -308,10 +323,10 @@ impl NvGpuUsages {
     }
 }
 
-fn mode_to_policy(state: NVCtrlFanControlState) -> u32 {
+fn mode_to_policy(state: NVCtrlFanControlState) -> NV_COOLER_POLICY {
     match state {
-        NVCtrlFanControlState::Auto => 0x20,
-        NVCtrlFanControlState::Manual => 0x1,
+        NVCtrlFanControlState::Auto => NV_COOLER_POLICY::DEFAULT,
+        NVCtrlFanControlState::Manual => NV_COOLER_POLICY::MANUAL,
     }
 }
 
@@ -368,9 +383,15 @@ impl NvFanController for NvidiaControl {
                 match unsafe { NvAPI_GPU_GetCoolerSettings(handle[0], 0, &mut cooler_settings) } {
                     0 => {
                         match cooler_settings.coolers[0].current_policy {
-                            0x20 | 0x10 => { Ok(NVCtrlFanControlState::Auto) },
-                            0x01 => { Ok(NVCtrlFanControlState::Manual) },
-                            i => { Err(format!("NvAPI_GPU_GetCoolerSettings() unknown policy: {}", i)) }
+                            NV_COOLER_POLICY::MANUAL => { Ok(NVCtrlFanControlState::Manual) },
+                            NV_COOLER_POLICY::PERF          | NV_COOLER_POLICY::CONTINUOUS_SW |
+                            NV_COOLER_POLICY::CONTINUOUS_HW | NV_COOLER_POLICY::DEFAULT |
+                            NV_COOLER_POLICY::DISCRETE => {
+                                    Ok(NVCtrlFanControlState::Auto)
+                            },
+                            i => {
+                                Err(format!("NvAPI_GPU_GetCoolerSettings() unknown policy: {:?}", i))
+                            }
                         }
 
                     },
@@ -393,7 +414,7 @@ impl NvFanController for NvidiaControl {
         match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
             0 => {
                 let mut levels = NvGpuCoolerLevels::new();
-                levels.set_policy(0, policy as i32);
+                levels.set_policy(0, policy);
                 levels.set_level(0, fanspeed);
                 match unsafe { NvAPI_GPU_SetCoolerLevels(handle[0], 0, &levels) } {
                     0 => { Ok(()) },
@@ -443,7 +464,7 @@ impl NvFanController for NvidiaControl {
         let policy = match self.get_ctrl_status() {
             Ok(mode) => mode_to_policy(mode),
             Err(e) => { return Err(e); }
-        } as i32;
+        };
 
         let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
         let mut count = 0 as u32;
