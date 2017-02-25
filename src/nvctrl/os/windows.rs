@@ -61,7 +61,7 @@ extern {
     fn NvAPI_GetInterfaceVersionString(ver: *mut NvAPI_ShortString) -> libc::c_int;
     fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
     fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandle, name: *mut NvAPI_ShortString) -> libc::c_int;
-    fn NvAPI_GPU_GetTachReading(handles: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
+    fn NvAPI_GPU_GetTachReading(handle: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
     fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
     fn NvAPI_SYS_GetDriverAndBranchVersion(driverVersion: *mut u32, branch: *mut NvAPI_ShortString) -> libc::c_int;
 }
@@ -75,7 +75,7 @@ extern {
     fn NvAPI_GetInterfaceVersionString(ver: *mut NvAPI_ShortString) -> libc::c_int;
     fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
     fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandle, name: *mut NvAPI_ShortString) -> libc::c_int;
-    fn NvAPI_GPU_GetTachReading(handles: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
+    fn NvAPI_GPU_GetTachReading(handle: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
     fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
     fn NvAPI_SYS_GetDriverAndBranchVersion(driverVersion: *mut u32, branch: *mut NvAPI_ShortString) -> libc::c_int;
 }
