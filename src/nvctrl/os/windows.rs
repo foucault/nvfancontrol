@@ -331,17 +331,23 @@ fn mode_to_policy(state: NVCtrlFanControlState) -> NV_COOLER_POLICY {
 }
 
 pub struct NvidiaControl {
-    pub limits: (u16, u16)
+    pub limits: (u16, u16),
+    handles: [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS],
+    gpu_count: u32
 }
 
 impl NvidiaControl {
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
-            0 => Ok(
-                NvidiaControl {
-                    limits: lim
+            0 => {
+                let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
+                let mut count = 0 as u32;
+                match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
+                    0 => Ok(NvidiaControl{ limits: lim,
+                        handles: handle, gpu_count: count }),
+                    i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error: {}", i))
                 }
-            ),
+            },
             i => Err(format!("NvAPI_Initialize() failed; error: {}", i))
         }
     }
@@ -357,48 +363,32 @@ impl Drop for NvidiaControl {
 impl NvFanController for NvidiaControl {
 
     fn get_temp(&self) -> Result<i32, String> {
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
-            0 => {
-                let mut thermal = NV_GPU_THERMAL_SETTINGS_V2::new();
-                match unsafe { NvAPI_GPU_GetThermalSettings(handle[0], 0, &mut thermal) } {
-                    0 => Ok(thermal.temp(0)),
-                    i => Err(format!("NvAPI_GPU_GetThermalSettings() failed; error {}", i))
-                }
-            },
-            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
+        let mut thermal = NV_GPU_THERMAL_SETTINGS_V2::new();
+        match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[0], 0, &mut thermal) } {
+            0 => Ok(thermal.temp(0)),
+            i => Err(format!("NvAPI_GPU_GetThermalSettings() failed; error {}", i))
         }
     }
 
 
     fn get_ctrl_status(&self) -> Result<NVCtrlFanControlState, String> {
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
+        let mut cooler_settings = NvGpuCoolerSettings::new();
+        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[0], 0, &mut cooler_settings) } {
             0 => {
-                let mut cooler_settings = NvGpuCoolerSettings::new();
-                match unsafe { NvAPI_GPU_GetCoolerSettings(handle[0], 0, &mut cooler_settings) } {
-                    0 => {
-                        match cooler_settings.coolers[0].current_policy {
-                            NV_COOLER_POLICY::MANUAL => { Ok(NVCtrlFanControlState::Manual) },
-                            NV_COOLER_POLICY::PERF          | NV_COOLER_POLICY::CONTINUOUS_SW |
-                            NV_COOLER_POLICY::CONTINUOUS_HW | NV_COOLER_POLICY::DEFAULT |
-                            NV_COOLER_POLICY::DISCRETE => {
-                                    Ok(NVCtrlFanControlState::Auto)
-                            },
-                            i => {
-                                Err(format!("NvAPI_GPU_GetCoolerSettings() unknown policy: {:?}", i))
-                            }
-                        }
-
+                match cooler_settings.coolers[0].current_policy {
+                    NV_COOLER_POLICY::MANUAL => { Ok(NVCtrlFanControlState::Manual) },
+                    NV_COOLER_POLICY::PERF          | NV_COOLER_POLICY::CONTINUOUS_SW |
+                    NV_COOLER_POLICY::CONTINUOUS_HW | NV_COOLER_POLICY::DEFAULT |
+                    NV_COOLER_POLICY::DISCRETE => {
+                            Ok(NVCtrlFanControlState::Auto)
                     },
-                    i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+                    i => {
+                        Err(format!("NvAPI_GPU_GetCoolerSettings() unknown policy: {:?}", i))
+                    }
                 }
+
             },
-            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
+            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
         }
     }
 
@@ -408,52 +398,28 @@ impl NvFanController for NvidiaControl {
         let fanspeed = try!(self.get_fanspeed());
         let policy = mode_to_policy(typ);
 
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
-            0 => {
-                let mut levels = NvGpuCoolerLevels::new();
-                levels.set_policy(0, policy);
-                levels.set_level(0, fanspeed);
-                match unsafe { NvAPI_GPU_SetCoolerLevels(handle[0], 0, &levels) } {
-                    0 => { Ok(()) },
-                    i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
-                }
-            },
-            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
+        let mut levels = NvGpuCoolerLevels::new();
+        levels.set_policy(0, policy);
+        levels.set_level(0, fanspeed);
+        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[0], 0, &levels) } {
+            0 => { Ok(()) },
+            i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
         }
     }
 
     fn get_fanspeed(&self) -> Result<i32, String> {
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
-            0 => {
-                let mut cooler_settings = NvGpuCoolerSettings::new();
-                match unsafe { NvAPI_GPU_GetCoolerSettings(handle[0], 0, &mut cooler_settings) } {
-                    0 => Ok(cooler_settings.coolers[0].current_level),
-                    i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
-                }
-            },
-            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
+        let mut cooler_settings = NvGpuCoolerSettings::new();
+        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[0], 0, &mut cooler_settings) } {
+            0 => Ok(cooler_settings.coolers[0].current_level),
+            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
         }
     }
 
     fn get_fanspeed_rpm(&self) -> Result<i32, String> {
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
-            0 => {
-                let mut speed = 0 as libc::c_uint;
-                match unsafe { NvAPI_GPU_GetTachReading(handle[0], &mut speed) } {
-                    0 => Ok(speed as i32),
-                    i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i))
-                }
-            },
-            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
+        let mut speed = 0 as libc::c_uint;
+        match unsafe { NvAPI_GPU_GetTachReading(self.handles[0], &mut speed) } {
+            0 => Ok(speed as i32),
+            i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i))
         }
     }
 
@@ -466,23 +432,13 @@ impl NvFanController for NvidiaControl {
             Err(e) => { return Err(e); }
         };
 
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
-            0 => {
-                let mut levels = NvGpuCoolerLevels::new();
-                levels.set_policy(0, policy);
-                levels.set_level(0, true_speed as i32);
-                match unsafe { NvAPI_GPU_SetCoolerLevels(handle[0], 0, &levels) } {
-                    0 => {},
-                    i => { return Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)); }
-                }
-            },
-            i => { return Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i)); }
+        let mut levels = NvGpuCoolerLevels::new();
+        levels.set_policy(0, policy);
+        levels.set_level(0, true_speed as i32);
+        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[0], 0, &levels) } {
+            0 => { Ok(()) },
+            i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
         }
-
-        Ok(())
     }
 
     fn get_version(&self) -> Result<String, String> {
@@ -496,40 +452,24 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_adapter(&self) -> Result<String, String> {
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
-            0 => {
-                let mut adapter = NvAPI_ShortString::new();
-                match unsafe { NvAPI_GPU_GetFullName(handle[0], &mut adapter) } {
-                    0 => Ok(adapter.to_string()),
-                    i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i))
-                }
-            },
-            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
+        let mut adapter = NvAPI_ShortString::new();
+        match unsafe { NvAPI_GPU_GetFullName(self.handles[0], &mut adapter) } {
+            0 => Ok(adapter.to_string()),
+            i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i))
         }
     }
 
     fn get_utilization(&self) -> Result<HashMap<&str, i32>, String> {
-        let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
-        let mut count = 0 as u32;
-
-        match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
+        let mut gpu_usages = NvGpuUsages::new();
+        match unsafe { NvAPI_GPU_GetUsages(self.handles[0], &mut gpu_usages) } {
             0 => {
-                let mut gpu_usages = NvGpuUsages::new();
-                match unsafe { NvAPI_GPU_GetUsages(handle[0], &mut gpu_usages) } {
-                    0 => {
-                        let mut ret: HashMap<&str, i32> = HashMap::with_capacity(3);
-                        ret.insert("graphics", gpu_usages.usage[2] as i32);
-                        ret.insert("memory", gpu_usages.usage[6] as i32);
-                        ret.insert("video", gpu_usages.usage[10] as i32);
-                        Ok(ret)
-                    },
-                    i => Err(format!("NvAPI_GPU_GetUsages() failed; error {}", i))
-                }
+                let mut ret: HashMap<&str, i32> = HashMap::with_capacity(3);
+                ret.insert("graphics", gpu_usages.usage[2] as i32);
+                ret.insert("memory", gpu_usages.usage[6] as i32);
+                ret.insert("video", gpu_usages.usage[10] as i32);
+                Ok(ret)
             },
-            i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error {}", i))
+            i => Err(format!("NvAPI_GPU_GetUsages() failed; error {}", i))
         }
     }
 }
