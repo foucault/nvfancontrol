@@ -42,16 +42,11 @@ enum CTRL_ATTR {
 }
 
 #[link(name="X11")]
-extern {
-    fn XOpenDisplay(name: *const c_char) -> *mut Display;
-    fn XCloseDisplay(dpy: *const Display);
-    //fn XDefaultScreen(dpy: *const Display) -> c_int;
-}
-
-#[link(name="X11")]
 #[link(name="Xext")]
 #[link(name="XNVCtrl")]
 extern {
+    fn XOpenDisplay(name: *const c_char) -> *mut Display;
+    fn XCloseDisplay(dpy: *const Display);
     fn XNVCTRLQueryAttribute(dpy: *const Display, id: c_int, mask: c_uint,
                              attribute: CTRL_ATTR, value: *mut c_int) -> c_int;
     fn XNVCTRLQueryStringAttribute(dpy: *const Display, id: c_int, mask: c_uint,
