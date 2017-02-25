@@ -17,6 +17,9 @@ extern crate time;
 #[cfg(unix)] extern crate xdg;
 #[cfg(unix)] use xdg::BaseDirectories;
 
+#[macro_use] extern crate serde_derive;
+extern crate serde_json;
+
 use std::io::{BufReader, BufRead};
 use std::fs::File;
 use std::env;
@@ -364,6 +367,38 @@ fn curve_from_conf(path: PathBuf) -> Result<Vec<(u16,u16)>, String> {
 
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct Data {
+    temp: i32,
+    speed: i32,
+    rpm: i32,
+    load: i32,
+    mode: Option<NVCtrlFanControlState>
+}
+
+impl Data {
+    fn update(&mut self, temp: i32, speed: i32, rpm: i32,
+              load: i32, mode: Option<NVCtrlFanControlState>) {
+        self.temp = temp;
+        self.speed = speed;
+        self.rpm = rpm;
+        self.load = load;
+        self.mode = mode;
+    }
+}
+
+impl Default for Data {
+   fn default() -> Data {
+       Data {
+           temp: -99,
+           speed: -1,
+           rpm: -1,
+           load: -1,
+           mode: None
+       }
+   }
+}
+
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -377,6 +412,8 @@ pub fn main() {
                  already spinning in auto mode");
     opts.optflag("m", "monitor-only", "Do not update the fan speed and control
                  mode; just log temperatures and fan speeds");
+    opts.optflag("j", "json-output", "Print a json representation of the data
+                 to stdout (useful for parsing)");
     opts.optflag("h", "help", "Print this help message");
 
     let matches = match opts.parse(&args[1..]) {
@@ -468,6 +505,10 @@ pub fn main() {
         info!("Option \"-m\" is present; curve will have no actual effect");
     }
 
+    let json_output = matches.opt_present("j");
+
+    let mut data = Data::default();
+
     // Main loop
     loop {
         if !RUNNING.load(Ordering::Relaxed) {
@@ -486,13 +527,21 @@ pub fn main() {
             None => -1
         };
 
+        data.update(mgr.ctrl.get_temp().unwrap(), mgr.ctrl.get_fanspeed().unwrap(),
+                    mgr.ctrl.get_fanspeed_rpm().unwrap(), graphics_util,
+                    mgr.ctrl.get_ctrl_status().ok());
+
         debug!("Temp: {}; Speed: {} RPM ({}%); Load: {}%; Mode: {}",
-            mgr.ctrl.get_temp().unwrap(), mgr.ctrl.get_fanspeed_rpm().unwrap(),
-            mgr.ctrl.get_fanspeed().unwrap(), graphics_util,
-            match mgr.ctrl.get_ctrl_status() {
-                Ok(NVCtrlFanControlState::Auto) => "Auto",
-                Ok(NVCtrlFanControlState::Manual) => "Manual",
-                Err(_) => "ERR"});
+            data.temp, data.rpm, data.speed, data.load,
+            match data.mode {
+                Some(NVCtrlFanControlState::Auto) => "Auto",
+                Some(NVCtrlFanControlState::Manual) => "Manual",
+                None => "ERR"
+            });
+
+        if json_output {
+            println!("{}", serde_json::to_string(&data).unwrap());
+        }
 
         thread::sleep(timeout);
     }

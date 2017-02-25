@@ -14,6 +14,8 @@ pub use self::os::unix::*;
 #[cfg(target_os="windows")]
 pub use self::os::windows::*;
 
+#[macro_use] extern crate serde_derive;
+
 pub mod os;
 
 pub trait NvFanController {
@@ -28,7 +30,7 @@ pub trait NvFanController {
     fn get_utilization(&self) -> Result<HashMap<&str, i32>, String>;
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum NVCtrlFanControlState {
     Auto = 0,
     Manual
