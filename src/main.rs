@@ -367,6 +367,24 @@ fn curve_from_conf(path: PathBuf) -> Result<Vec<(u16,u16)>, String> {
 
 }
 
+fn make_options() -> Options {
+    let mut opts = Options::new();
+
+    opts.optflag("d", "debug", "Enable debug messages");
+    opts.optopt("l", "limits",
+        "Comma separated lower and upper limits, use 0 to disable,
+        default: 20,80", "LOWER,UPPER");
+    opts.optflag("f", "force", "Always use the custom curve even if the fan is
+                 already spinning in auto mode");
+    opts.optflag("m", "monitor-only", "Do not update the fan speed and control
+                 mode; just log temperatures and fan speeds");
+    opts.optflag("j", "json-output", "Print a json representation of the data
+                 to stdout (useful for parsing)");
+    opts.optflag("h", "help", "Print this help message");
+
+    opts
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Data {
     temp: i32,
@@ -402,19 +420,7 @@ impl Default for Data {
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
-    let mut opts = Options::new();
-
-    opts.optflag("d", "debug", "Enable debug messages");
-    opts.optopt("l", "limits",
-        "Comma separated lower and upper limits, use 0 to disable,
-        default: 20,80", "LOWER,UPPER");
-    opts.optflag("f", "force", "Always use the custom curve even if the fan is
-                 already spinning in auto mode");
-    opts.optflag("m", "monitor-only", "Do not update the fan speed and control
-                 mode; just log temperatures and fan speeds");
-    opts.optflag("j", "json-output", "Print a json representation of the data
-                 to stdout (useful for parsing)");
-    opts.optflag("h", "help", "Print this help message");
+    let opts = make_options();
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
