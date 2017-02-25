@@ -1,7 +1,6 @@
 use libc::{c_int, c_char, c_void, c_uint};
 use std::collections::HashMap;
 use std::mem;
-use std::ptr;
 use std::ffi::{CStr, CString};
 use ::{NVCtrlFanControlState, NvFanController};
 
@@ -71,11 +70,12 @@ pub struct NvidiaControl {
 impl NvidiaControl {
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         let dpy = unsafe { XOpenDisplay(CString::new(":0").unwrap().as_ptr()) };
-        if dpy == ptr::null_mut() {
-            return Err(format!("XNVCtrl failed: Could open display :0"));
+        if dpy.is_null() {
+            Err(format!("XNVCtrl failed: Could open display :0"))
+        } else {
+            // let screen = unsafe { XDefaultScreen(dpy) };
+            Ok(NvidiaControl{ limits: lim, dpy: dpy/*, screen: screen */})
         }
-        // let screen = unsafe { XDefaultScreen(dpy) };
-        Ok(NvidiaControl{ limits: lim, dpy: dpy/*, screen: screen */})
     }
 }
 
