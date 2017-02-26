@@ -66,8 +66,9 @@ not available or you explicitly want it to be linked dynamically add
 ### Enable Coolbits (Linux only)
 
 For Linux ensure that Coolbits is enabled from your X11 server settings. To
-do so create a file named `20-nvidia.conf` within `/etc/X11/xorg.conf.d/`
-containing the following
+do so create a file named `20-nvidia.conf` within `/etc/X11/xorg.conf.d/` or
+`/usr/share/X11/xorg.conf.d/` (depends on distribution) containing the
+following
 
     Section "Device"
         Identifier "Device 0"
