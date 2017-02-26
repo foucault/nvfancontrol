@@ -27,7 +27,12 @@ fn main() {
     println!("cargo:rustc-link-search=/usr/{}", lib_path);
     println!("cargo:rustc-link-search=/usr/local/{}", lib_path);
 
-    println!("cargo:rustc-link-lib=static=XNVCtrl");
+    #[cfg(feature="dynamic-xnvctrl")] {
+        println!("cargo:rustc-link-lib=dylib=XNVCtrl");
+    }
+    #[cfg(not(feature="dynamic-xnvctrl"))] {
+        println!("cargo:rustc-link-lib=static=XNVCtrl");
+    }
     println!("cargo:rustc-link-lib=dylib=X11");
     println!("cargo:rustc-link-lib=dylib=Xext");
 }

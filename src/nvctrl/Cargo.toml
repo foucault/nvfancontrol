@@ -16,3 +16,6 @@ lazy_static = "*"
 [lib]
 name = "nvctrl"
 path = "lib.rs"
+
+[features]
+dynamic-xnvctrl = []

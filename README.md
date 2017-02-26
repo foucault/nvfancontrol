@@ -30,7 +30,7 @@ build the project from source read along.
 You will need:
 
 * the Rust compiler toolchain, stable >=1.1 or nightly (build)
-* XNVCtrl; static (build only)
+* XNVCtrl; static (build only) or dynamic (build and runtime)
 * Xlib (build and runtime)
 * Xext (build and runtime)
 
@@ -52,13 +52,16 @@ warned about this (build only)
 on which version you are building (x86, x64 or both) place `nvapi.lib`,
 `nvapi64.lib` or both in the root of the repository. As `nvapi` is linked
 statically there are no runtime dependencies apart from the NVidia driver
-(build only)
+(build only).
 
 For both platforms run `cargo build --release`. Upon successful compilation the
 executable can be found in `target/release/nvfancontrol`. On Linux the build
 tool expects the libraries installed in `/usr/lib` or `/usr/local/lib`. In case
 you have libraries installed in different locations export them using the
-`LIBRARY_PATH` environment variable.
+`LIBRARY_PATH` environment variable (colon separated paths). By default
+`libXNVCtrl` will be linked statically. If a static version of `libXNVCtrl` is
+not available or you explicitly want it to be linked dynamically add
+`--features=dynamic-xnvctrl` to the `cargo` incantation.
 
 ### Enable Coolbits (Linux only)
 

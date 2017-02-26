@@ -21,3 +21,5 @@ ctrlc = "*"
 [dependencies.nvctrl]
 path = "src/nvctrl"
 
+[features]
+dynamic-xnvctrl = ["nvctrl/dynamic-xnvctrl"]
