@@ -379,10 +379,10 @@ fn make_options() -> Options {
                  mode; just log temperatures and fan speeds");
     opts.optflag("j", "json-output", "Print a json representation of the data
                  to stdout (useful for parsing)");
-    opts.optopt("t", "tcp-server", "Print a json representation of the data
-                 over tcp port. Can be optionally followed by the port
-                 number over which the server will listen for incoming
-                 connections", "[PORT]");
+    opts.optflagopt("t", "tcp-server", "Print a json representation of the data
+                    over a tcp port. Can be optionally followed by the port
+                    number over which the server will listen for incoming
+                    connections", "[PORT]");
     opts.optflag("h", "help", "Print this help message");
 
     opts
