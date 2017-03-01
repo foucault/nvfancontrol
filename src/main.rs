@@ -26,9 +26,11 @@ use std::env;
 use std::thread;
 use std::process;
 use std::time::Duration;
+use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering, ATOMIC_BOOL_INIT};
 use std::io::Write;
 use std::path::PathBuf;
+use std::net::{TcpListener, TcpStream, Shutdown};
 
 // http://stackoverflow.com/questions/27588416/how-to-send-output-to-stderr
 macro_rules! errln(
@@ -42,10 +44,12 @@ macro_rules! errln(
 
 const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
+const DEFAULT_PORT: u32 = 12125;
 const DEFAULT_CURVE: [(u16, u16); 7] = [(41, 20), (49, 30), (57, 45), (66, 55),
                                         (75, 63), (78, 72), (80, 80)];
 
 static RUNNING: AtomicBool = ATOMIC_BOOL_INIT;
+static SRVING: AtomicBool = ATOMIC_BOOL_INIT;
 
 struct Logger;
 
@@ -241,11 +245,6 @@ fn register_signal_handlers() -> Result<(), String> {
     }
 }
 
-fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options]", program);
-    println!("{}", opts.usage(&brief));
-}
-
 fn make_limits(res: String) -> Result<Option<(u16,u16)>, String> {
     let parts: Vec<&str> = res.split(',').collect();
     if parts.len() == 1 {
@@ -380,13 +379,23 @@ fn make_options() -> Options {
                  mode; just log temperatures and fan speeds");
     opts.optflag("j", "json-output", "Print a json representation of the data
                  to stdout (useful for parsing)");
+    opts.optopt("t", "tcp-server", "Print a json representation of the data
+                 over tcp port. Can be optionally followed by the port
+                 number over which the server will listen for incoming
+                 connections", "[PORT]");
     opts.optflag("h", "help", "Print this help message");
 
     opts
 }
 
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} [options]", program);
+    println!("{}", opts.usage(&brief));
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Data {
+    timespec: i64,
     temp: i32,
     speed: i32,
     rpm: i32,
@@ -395,8 +404,10 @@ struct Data {
 }
 
 impl Data {
-    fn update(&mut self, temp: i32, speed: i32, rpm: i32,
-              load: i32, mode: Option<NVCtrlFanControlState>) {
+    fn update(&mut self, timespec: i64, temp: i32, speed: i32,
+              rpm: i32, load: i32,
+              mode: Option<NVCtrlFanControlState>) {
+        self.timespec = timespec;
         self.temp = temp;
         self.speed = speed;
         self.rpm = rpm;
@@ -408,6 +419,7 @@ impl Data {
 impl Default for Data {
    fn default() -> Data {
        Data {
+           timespec: -1,
            temp: -99,
            speed: -1,
            rpm: -1,
@@ -415,6 +427,33 @@ impl Default for Data {
            mode: None
        }
    }
+}
+
+fn serve_tcp(data: Arc<RwLock<Data>>, port: u32) {
+    let l = TcpListener::bind(format!(":::{}", port).as_str()).unwrap();
+    SRVING.store(true, Ordering::Relaxed);
+    info!("Spinning up TCP server at {:?}", l.local_addr().unwrap());
+    'server: loop {
+        match l.accept() {
+            Ok((mut s, client)) => {
+                if RUNNING.load(Ordering::Relaxed) {
+                    debug!("Incoming TCP connection: {:?}", client);
+                    let raw_data = data.read().unwrap();
+                    let json = format!("{}\n",
+                                       serde_json::to_string(&*raw_data).unwrap());
+                    s.write_all(json.as_bytes()).ok();
+                } else {
+                    SRVING.store(false, Ordering::Relaxed);
+                    break 'server;
+                }
+                s.shutdown(Shutdown::Both).ok();
+            }
+            Err(e) => {
+                error!("TCP server error: {:?}", e);
+            }
+        }
+    };
+    debug!("TCP server terminated")
 }
 
 pub fn main() {
@@ -513,7 +552,31 @@ pub fn main() {
 
     let json_output = matches.opt_present("j");
 
-    let mut data = Data::default();
+    let data = Arc::new(RwLock::new(Data::default()));
+
+    let server_port = if matches.opt_present("t") {
+        let srv_data = data.clone();
+        let strport = format!("{}", DEFAULT_PORT);
+        let port: u32 = match matches.opt_default("t", strport.as_str()) {
+            Some(s) => {
+                match s.parse::<u32>() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!("Could not parse port number: {:?}", e);
+                        DEFAULT_PORT
+                    }
+                }
+            }
+            None => {
+                warn!("No port provided for server, using default");
+                DEFAULT_PORT
+            }
+        };
+        thread::spawn(move || { serve_tcp(srv_data, port) });
+        port
+    } else {
+        DEFAULT_PORT
+    };
 
     // Main loop
     loop {
@@ -533,23 +596,33 @@ pub fn main() {
             None => -1
         };
 
-        data.update(mgr.ctrl.get_temp().unwrap(), mgr.ctrl.get_fanspeed().unwrap(),
-                    mgr.ctrl.get_fanspeed_rpm().unwrap(), graphics_util,
-                    mgr.ctrl.get_ctrl_status().ok());
+        let mut raw_data = data.write().unwrap();
+        (*raw_data).update(time::now().to_timespec().sec,
+                           mgr.ctrl.get_temp().unwrap(),
+                           mgr.ctrl.get_fanspeed().unwrap(),
+                           mgr.ctrl.get_fanspeed_rpm().unwrap(), graphics_util,
+                           mgr.ctrl.get_ctrl_status().ok());
+        drop(raw_data);
 
+        let raw_data = data.read().unwrap();
         debug!("Temp: {}; Speed: {} RPM ({}%); Load: {}%; Mode: {}",
-            data.temp, data.rpm, data.speed, data.load,
-            match data.mode {
+            raw_data.temp, raw_data.rpm, raw_data.speed, raw_data.load,
+            match raw_data.mode {
                 Some(NVCtrlFanControlState::Auto) => "Auto",
                 Some(NVCtrlFanControlState::Manual) => "Manual",
                 None => "ERR"
             });
 
         if json_output {
-            println!("{}", serde_json::to_string(&data).unwrap());
+            println!("{}", serde_json::to_string(&*raw_data).unwrap());
         }
 
         thread::sleep(timeout);
+    }
+
+    if SRVING.load(Ordering::Relaxed) {
+        // Flush the server
+        let _ = TcpStream::connect(format!(":::{}", server_port).as_str());
     }
 
 }
