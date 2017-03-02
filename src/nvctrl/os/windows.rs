@@ -21,6 +21,9 @@ const NVAPI_MAX_USAGES_PER_GPU: usize = 33;
 #[cfg(target_arch="x86_64")] type QueryPtr = u64;
 #[cfg(target_arch="x86_64")] const NVAPI_DLL: &'static str = "nvapi64.dll";
 
+/// Query codes for NvAPI functions hidden from the public API. This is used
+/// in conjuction with `NvAPI_QueryInterface`. There are implementations for
+/// all the variants defined in `QueryCode`.
 #[allow(dead_code)]
 #[repr(u32)]
 enum QueryCode {
@@ -31,6 +34,12 @@ enum QueryCode {
     GetUsages = 0x189A1FDF
 }
 
+/// Generates a NvAPI compatible version for a specified struct type
+///
+/// **Arguments**
+///
+/// * `v` - Version number
+/// * `T` - The type of the struct that this version is generated for
 #[allow(non_snake_case)]
 fn NVAPI_VERSION<T>(v: u32) -> u32 {
     let size: u32 = mem::size_of::<T>() as u32;
@@ -38,11 +47,14 @@ fn NVAPI_VERSION<T>(v: u32) -> u32 {
 }
 
 lazy_static! {
+    /// Dynamic load of nvapi{64}.dll
     static ref NVAPI: Library = {
         let system_root = env::var("SystemRoot").unwrap_or(String::from("C:\\Windows"));
         let nvapi_path = format!("{}\\System32\\{}", system_root, NVAPI_DLL);
         Library::new(nvapi_path).unwrap()
     };
+    /// Registration of `NvAPI_QueryInterface` function which provides pointer to all the
+    /// function of NvAPI.
     static ref NvAPI_QueryInterface: Symbol<'static, unsafe extern "C" fn(QueryPtr) -> *const ()> =
         unsafe { NVAPI.get(b"nvapi_QueryInterface").unwrap() };
 }
@@ -52,34 +64,147 @@ lazy_static! {
  * feature(link_cfg) makes it into stable
  * [0]: https://github.com/rust-lang/rust/issues/37406
  */
+/// All these functions return a status code upon call. There are wrappers for all these function
+/// through the `NvFanController` trait and are part of the documented NVAPI spec.
 #[allow(dead_code)]
 #[cfg(target_arch="x86_64")]
 #[link(name="nvapi64", kind="static")]
 extern {
+    /// Initialises NvAPI.
     fn NvAPI_Initialize() -> libc::c_int;
+
+    /// Unloads nvapi{64}.dll from memory.
     fn NvAPI_Unload() -> libc::c_int;
+
+    /// Returns the version of the NVAPI library
+    ///
+    /// ***Arguments***
+    ///
+    /// * `ver` - An `NvAPI_ShortString` that will be populated upon function call with the NVAPI
+    /// version string
     fn NvAPI_GetInterfaceVersionString(ver: *mut NvAPI_ShortString) -> libc::c_int;
+
+    /// Lists all available physical GPUS into the specified array.
+    ///
+    /// **Arguments**
+    ///
+    /// * `handles` - An array of unitialized `NvPhysicalGpuHandle`s. The size of this function is
+    /// specified by the static variable `NVAPI_MAX_PHYSICAL_GPUS`. The array will be populated
+    /// upon function call.
+    ///
+    /// * `count` - The number of available physical GPUs. These variable will be populated upon
+    /// function call.
     fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
+
+    /// Get the name of the specified GPU
+    ///
+    /// **Arguments**
+    ///
+    /// * `handle` - The GPU for which the name is requested
+    /// * `name` - A pointer to an `NvAPI_ShortString` that will be populated with the adapter name
+    /// upon function call.
     fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandle, name: *mut NvAPI_ShortString) -> libc::c_int;
+
+    /// Returns the fan speed in RPM
+    ///
+    /// **Arguments**
+    ///
+    /// * `handle` - The GPU for which the fan speed is requested
+    /// * `value` - The fan speed in RPM; it will be populated upon function call
     fn NvAPI_GPU_GetTachReading(handle: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
+
+    /// Returns the thermal status of the specified GPU
+    ///
+    /// **Arguments**
+    ///
+    /// * `handle` - The GPU for which the thermal settings are requested.
+    /// * `index` - The sensor index
+    /// * `settings` - The thermal settings struct; it will be populated upon function call
     fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
+
+    /// Returns the NVidia driver version
+    ///
+    /// **Arguments**
+    ///
+    /// * `driverVersion` - The driver version number; it will be populated upon function call
+    /// * `branch` - The driver version branch; it will be populated upon function call
     fn NvAPI_SYS_GetDriverAndBranchVersion(driverVersion: *mut u32, branch: *mut NvAPI_ShortString) -> libc::c_int;
 }
 
+/// All these functions return a status code upon call. There are wrappers for all these function
+/// through the `NvFanController` trait and are part of the documented NVAPI spec.
 #[allow(dead_code)]
 #[cfg(target_arch="x86")]
 #[link(name="nvapi", kind="static")]
 extern {
+    /// Initialises NvAPI.
     fn NvAPI_Initialize() -> libc::c_int;
+
+    /// Unloads nvapi{64}.dll from memory.
     fn NvAPI_Unload() -> libc::c_int;
+
+    /// Returns the version of the NVAPI library
+    ///
+    /// ***Arguments***
+    ///
+    /// * `ver` - An `NvAPI_ShortString` that will be populated upon function call with the NVAPI
+    /// version string
     fn NvAPI_GetInterfaceVersionString(ver: *mut NvAPI_ShortString) -> libc::c_int;
+
+    /// Lists all available physical GPUS into the specified array.
+    ///
+    /// **Arguments**
+    ///
+    /// * `handles` - An array of unitialized `NvPhysicalGpuHandle`s. The size of this function is
+    /// specified by the static variable `NVAPI_MAX_PHYSICAL_GPUS`. The array will be populated
+    /// upon function call.
+    ///
+    /// * `count` - The number of available physical GPUs. These variable will be populated upon
+    /// function call.
     fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
+
+    /// Get the name of the specified GPU
+    ///
+    /// **Arguments**
+    ///
+    /// * `handle` - The GPU for which the name is requested
+    /// * `name` - A pointer to an `NvAPI_ShortString` that will be populated with the adapter name
+    /// upon function call.
     fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandle, name: *mut NvAPI_ShortString) -> libc::c_int;
+
+    /// Returns the fan speed in RPM
+    ///
+    /// **Arguments**
+    ///
+    /// * `handle` - The GPU for which the fan speed is requested
+    /// * `value` - The fan speed in RPM; it will be populated upon function call
     fn NvAPI_GPU_GetTachReading(handle: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
+
+    /// Returns the thermal status of the specified GPU
+    ///
+    /// **Arguments**
+    ///
+    /// * `handle` - The GPU for which the thermal settings are requested.
+    /// * `index` - The sensor index
+    /// * `settings` - The thermal settings struct; it will be populated upon function call
     fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
+
+    /// Returns the NVidia driver version
+    ///
+    /// **Arguments**
+    ///
+    /// * `driverVersion` - The driver version number; it will be populated upon function call
+    /// * `branch` - The driver version branch; it will be populated upon function call
     fn NvAPI_SYS_GetDriverAndBranchVersion(driverVersion: *mut u32, branch: *mut NvAPI_ShortString) -> libc::c_int;
 }
 
+/// Sets the cooler level for the specified GPU. This is an undocumented function.
+///
+/// **Arguments**
+///
+/// * `handle` - The GPU for which the cooler levels will be set
+/// * `index` - The cooler index
+/// * `levels` - The cooler levels for the specified GPU
 #[allow(non_snake_case)]
 unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandle, index: u32, levels: *const NvGpuCoolerLevels) -> libc::c_int {
     let func = mem::transmute::<
@@ -88,6 +213,15 @@ unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandle, index: u32, lev
     func(handle, index, levels)
 }
 
+/// Returns the active cooler settings for the specified GPU and cooler. This is an undocumented
+/// function.
+///
+/// **Arguments**
+///
+/// * `handle` - The GPU for which the cooler settings are requested
+/// * `index` - The cooler index
+/// * `settings` - The `NvGpuCoolerSettings` containing the requested information; it will be
+/// populated upon function call
 #[allow(non_snake_case)]
 unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NvGpuCoolerSettings) -> libc::c_int {
     let func = mem::transmute::<
@@ -96,6 +230,13 @@ unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandle, index: u32, s
     func(handle, index, settings)
 }
 
+/// Returns the GPU utilisation. This is an undocumented function.
+///
+/// **Arguments**
+///
+/// * `handle` - The GPU for which the utilisation is requested
+/// * `usages` - The `NvGpuUsages` containing the requested information; it will be populated upon
+/// function call
 #[allow(non_snake_case)]
 unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandle, usages: *mut NvGpuUsages) -> libc::c_int {
     let func = mem::transmute::<
@@ -104,26 +245,32 @@ unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandle, usages: *mut NvGpuUsa
     func(handle, usages)
 }
 
+/// A representation of the NvAPI_ShortString. It is an array of `c_char` with a predefined length.
 #[repr(C)]
 struct NvAPI_ShortString {
     inner: [libc::c_char; NVAPI_SHORT_STRING_MAX]
 }
 
 impl NvAPI_ShortString {
+    /// Create an empty `NvAPI_ShortString` consisting entirely of \0
     fn new() -> NvAPI_ShortString {
         NvAPI_ShortString { inner: [0 as libc::c_char; NVAPI_SHORT_STRING_MAX] }
     }
 
+    /// Returns a `String` representation of this `NvAPI_ShortString`. This copied data
+    /// in order to be useful.
     fn to_string(&self) -> String {
         unsafe { CStr::from_ptr(self.inner.as_ptr()).to_str().unwrap().to_owned() }
     }
 }
 
+/// A GPU handle.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct NvPhysicalGpuHandle { unused: i32 }
 
 impl NvPhysicalGpuHandle {
+    /// Returns a new empty GPU handle.
     fn new() -> NvPhysicalGpuHandle {
         NvPhysicalGpuHandle { unused: 0 }
     }
@@ -164,6 +311,7 @@ enum NV_THERMAL_TARGET {
     UNKNOWN       = -1,
 }
 
+/// A representation of a thermal sensor
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct NvThermalSensor {
@@ -175,6 +323,8 @@ struct NvThermalSensor {
 }
 
 impl NvThermalSensor {
+    /// Instantiates a new empty thermal sensors. The field are further populated when a function
+    /// call occurs.
     fn new() -> NvThermalSensor {
         NvThermalSensor {
             controller: NV_THERMAL_CONTROLLER::UNKNOWN,
@@ -186,15 +336,21 @@ impl NvThermalSensor {
     }
 }
 
+/// A thermal settings struct
 #[repr(C)]
 #[allow(non_snake_case)]
 struct NV_GPU_THERMAL_SETTINGS_V2 {
+    /// Struct version; created with `NVAPI_VERSION<T>()`
     version: u32,
+    /// Number of available sensors
     count: u32,
+    /// A list of all the available sensors
     sensors: [NvThermalSensor; NVAPI_MAX_THERMAL_SENSORS_PER_GPU]
 }
 
 impl NV_GPU_THERMAL_SETTINGS_V2 {
+    /// Returns a new `NV_GPU_THERMAL_SETTINGS_V2`; its fields are further populated when a
+    /// function call occurs.
     fn new() -> NV_GPU_THERMAL_SETTINGS_V2 {
         NV_GPU_THERMAL_SETTINGS_V2 {
             version: NVAPI_VERSION::<NV_GPU_THERMAL_SETTINGS_V2>(2u32),
@@ -212,36 +368,50 @@ impl NV_GPU_THERMAL_SETTINGS_V2 {
     }*/
 }
 
+/// A cooler policy enum
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 #[allow(non_snake_case)]
 #[allow(dead_code)]
 enum NV_COOLER_POLICY {
+    /// When a cooler is not available the policy is always `NONE` (0)
     NONE = 0,
+    /// Explicitly set cooler speed
     MANUAL = 1,
+    /// Performance profile
     PERF = 2,
+    /// Discrete temperature steps
     DISCRETE = 4,
+    /// Continuous temperature curve (hardware controlled)
     CONTINUOUS_HW = 8,
+    /// Continuous temperature curver (software controlled)
     CONTINUOUS_SW = 16,
+    /// The default policy; this will always change to the default policy for the GPU
     DEFAULT = 32,
 }
 
+/// The level (in %) for a GPU cooler
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(non_snake_case)]
 struct NvLevel {
+    /// The level value
     level: i32,
+    /// The associated policy
     policy: NV_COOLER_POLICY
 }
 
+/// Cooler levels for each cooler in the GPU
 #[repr(C)]
 #[allow(non_snake_case)]
 struct NvGpuCoolerLevels {
+    /// Struct version
     version: u32,
     coolers: [NvLevel; NVAPI_MAX_COOLERS_PER_GPU]
 }
 
 impl NvGpuCoolerLevels {
+    /// Returns a new `NvGpuCoolerLevels`; it is usually populated upon function call
     fn new() -> NvGpuCoolerLevels {
         NvGpuCoolerLevels {
             version: NVAPI_VERSION::<NvGpuCoolerLevels>(1u32),
@@ -250,41 +420,69 @@ impl NvGpuCoolerLevels {
         }
     }
 
+    /// Set the level of the cooler fan (in %)
+    ///
+    /// **Arguments**
+    ///
+    /// * `index` - The index of the cooler
+    /// * `level` - The cooler level (in %)
     fn set_level(&mut self, index: u32, level: i32) {
         self.coolers[index as usize].level = level;
     }
 
+    /// Set the policy governing the specified cooler fan
+    ///
+    /// **Arguments**
+    ///
+    /// * `index` - The index of the cooler
+    /// * `poliy` - The `NV_COOLER_POLICY` for the cooler
     fn set_policy(&mut self, index: u32, policy: NV_COOLER_POLICY) {
         self.coolers[index as usize].policy = policy;
     }
 }
 
+/// A GPU cooler
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(non_snake_case)]
 struct NvCooler {
     cooler_type: i32,
+    /// Controller from `NV_THERMAL_CONTROLLER`
     controller: i32,
+    /// Default minimum speed in (%)
     default_min: i32,
+    /// Default maximum speed in (%)
     default_max: i32,
+    /// Current minimum speed in (%)
     current_min: i32,
+    /// Current maximum speed in (%)
     current_max: i32,
+    /// Current level of the GPU cooler (%)
     current_level: i32,
+    /// Default cooler policy from `NV_COOLER_POLICY`
     default_policy: NV_COOLER_POLICY,
+    /// Current cooler policy from `NV_COOLER_POLICY`
     current_policy: NV_COOLER_POLICY,
+    /// Cooling target from `NV_THERMAL_TARGET`
     target: i32,
     control_type: i32,
+    /// Cooler activity
     active: i32,
 }
 
+/// Cooler settings
 #[repr(C)]
 struct NvGpuCoolerSettings {
+    /// Struct version
     version: u32,
+    /// Number of available coolers
     count: u32,
+    /// All `NvCooler`s
     coolers: [NvCooler; NVAPI_MAX_COOLERS_PER_GPU]
 }
 
 impl NvGpuCoolerSettings {
+    /// Creates a new `NvGpuCoolerSettings` with sane defaults
     fn new() -> NvGpuCoolerSettings {
         NvGpuCoolerSettings {
             version: NVAPI_VERSION::<NvGpuCoolerSettings>(2u32),
@@ -307,14 +505,18 @@ impl NvGpuCoolerSettings {
     }
 }
 
+/// GPU utilisation
 #[repr(C)]
 #[allow(non_snake_case)]
 struct NvGpuUsages {
+    /// Struct version
     version: u32,
+    /// GPU utilisation for all GPUs
     usage: [u32; NVAPI_MAX_USAGES_PER_GPU]
 }
 
 impl NvGpuUsages {
+    /// Creates a new `NvGpuUsages` with sane defaults
     fn new() -> NvGpuUsages {
         NvGpuUsages {
             version: NVAPI_VERSION::<NvGpuUsages>(1),
@@ -323,6 +525,11 @@ impl NvGpuUsages {
     }
 }
 
+/// Helper to convert `NVCtrlFanControlState` to `NV_COOLER_POLICY`
+///
+/// **Arguments**
+///
+/// * `state` - The `NVCtrlFanControlState` to convert
 fn mode_to_policy(state: NVCtrlFanControlState) -> NV_COOLER_POLICY {
     match state {
         NVCtrlFanControlState::Auto => NV_COOLER_POLICY::DEFAULT,
@@ -330,13 +537,22 @@ fn mode_to_policy(state: NVCtrlFanControlState) -> NV_COOLER_POLICY {
     }
 }
 
+/// NvidiaControl is the main struct that monitors and controls the
+/// GPU fan state in addition with thermal and general information.
 pub struct NvidiaControl {
+    /// Current lower and upper limits
     pub limits: (u16, u16),
+    /// All GPU handles
     handles: [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS],
+    /// Number of available GPUs in the system
     gpu_count: u32
 }
 
 impl NvidiaControl {
+
+    /// Initialises the native library corresponding to the current OS.
+    /// `init()` should be called when calling `NvidiaControl::new()` so
+    /// there is no need to call it directly.
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
             0 => {

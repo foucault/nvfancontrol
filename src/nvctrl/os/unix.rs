@@ -8,6 +8,7 @@ const XNV_OK: i32 = 1;
 
 type Display = *mut c_void;
 
+/// XNVCtrl target
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
 #[repr(u32)]
@@ -23,6 +24,7 @@ enum CTRL_TARGET {
     DISPLAY = 8,
 }
 
+/// XNVCtrl Attribute (non exhaustive)
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
 #[repr(u32)]
@@ -40,34 +42,106 @@ enum CTRL_ATTR {
     THERMAL_COOLER_CURRENT_LEVEL = 417,
 }
 
+/// All required foreign functions that are used in this library
 #[link(name="X11")]
 #[link(name="Xext")]
 #[link(name="XNVCtrl")]
 extern {
+    /// Opens a new X11 display with the specified name
+    ///
+    /// **Arguments**
+    ///
+    /// * `name` - Name of the display to open
     fn XOpenDisplay(name: *const c_char) -> *mut Display;
+
+    /// Closes the specified display
+    ///
+    /// ***Arguments**
+    ///
+    /// * `dpy` - The `Display` to close
     fn XCloseDisplay(dpy: *const Display);
+
+    /// XNVCtrl generic int query
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `id` - Screen id
+    /// * `mask` - Attribute mask
+    /// * `attribute` - Target attribute to query (`CTRL_ATTR`)
+    /// * `value` - The value of the attribute that will be populated upon function call
     fn XNVCTRLQueryAttribute(dpy: *const Display, id: c_int, mask: c_uint,
                              attribute: CTRL_ATTR, value: *mut c_int) -> c_int;
+
+    /// XNVCtrl string query
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `id` - Screen id
+    /// * `mask` - Attribute mask
+    /// * `attribute` - Target attribute to query (`CTRL_ATTR`)
+    /// * `value` - The value of the attribute that will be populated upon function call
     fn XNVCTRLQueryStringAttribute(dpy: *const Display, id: c_int, mask: c_uint,
                                    attribute: CTRL_ATTR, value: *const *mut c_char) -> c_int;
+
+    /// XNVCtrl int query with target
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `target` - Attribute query target (`CTRL_TARGET`)
+    /// * `id` - Screen id
+    /// * `mask` - Attribute mask
+    /// * `attribute` - Attribute to query (`CTRL_ATTR`)
+    /// * `value` - The value of the attribute that will be populated upon function call
     fn XNVCTRLQueryTargetAttribute(dpy: *const Display, target: CTRL_TARGET,
                                    id: c_int, mask: c_uint,
                                    attribute: CTRL_ATTR, value: *mut c_int) -> c_int;
+
+    /// XNVCtrl string query with target
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `target` - Attribute query target (`CTRL_TARGET`)
+    /// * `id` - Screen id
+    /// * `mask` - Attribute mask
+    /// * `attribute` - Attribute to query (`CTRL_ATTR`)
+    /// * `value` - The value of the attribute that will be populated upon function call
     fn XNVCTRLQueryTargetStringAttribute(dpy: *const Display, target: CTRL_TARGET,
                                          id: c_int, mask: c_uint,
                                          attribute: CTRL_ATTR, value: *const *mut c_char) -> c_int;
+
+    /// XNVCtrl set target attribute
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `target` - Attribute modification target (`CTRL_TARGET`)
+    /// * `id` - Screen id
+    /// * `mask` - Attribute mask
+    /// * `attribute` - Attribute to set (`CTRL_ATTR`)
+    /// * `value` - The value of the attribute to set
     fn XNVCTRLSetTargetAttributeAndGetStatus(dpy: *const Display, target: CTRL_TARGET,
                                              id: c_int, mask: c_uint, attribute: CTRL_ATTR,
                                              value: c_int) -> c_int;
 }
 
+/// NvidiaControl is the main struct that monitors and controls the
+/// GPU fan state in addition with thermal and general information.
 pub struct NvidiaControl {
+    /// Current lower and upper limits
     pub limits: (u16, u16),
     dpy: *mut Display,
     //screen: c_int
 }
 
 impl NvidiaControl {
+
+    /// Initialises the native library corresponding to the current OS.
+    /// `init()` should be called when calling `NvidiaControl::new()` so
+    /// there is no need to call it directly.
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         let dpy = unsafe { XOpenDisplay(CString::new(":0").unwrap().as_ptr()) };
         if dpy.is_null() {
