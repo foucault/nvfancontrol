@@ -66,11 +66,11 @@ extern {
     /// **Arguments**
     ///
     /// * `dpy` - The current X11 `Display`
-    /// * `id` - Screen id
+    /// * `screen` - Screen id
     /// * `mask` - Attribute mask
     /// * `attribute` - Target attribute to query (`CTRL_ATTR`)
     /// * `value` - The value of the attribute that will be populated upon function call
-    fn XNVCTRLQueryAttribute(dpy: *const Display, id: c_int, mask: c_uint,
+    fn XNVCTRLQueryAttribute(dpy: *const Display, screen: c_int, mask: c_uint,
                              attribute: CTRL_ATTR, value: *mut c_int) -> c_int;
 
     /// XNVCtrl string query
@@ -78,11 +78,11 @@ extern {
     /// **Arguments**
     ///
     /// * `dpy` - The current X11 `Display`
-    /// * `id` - Screen id
+    /// * `screen` - Screen id
     /// * `mask` - Attribute mask
     /// * `attribute` - Target attribute to query (`CTRL_ATTR`)
     /// * `value` - The value of the attribute that will be populated upon function call
-    fn XNVCTRLQueryStringAttribute(dpy: *const Display, id: c_int, mask: c_uint,
+    fn XNVCTRLQueryStringAttribute(dpy: *const Display, screen: c_int, mask: c_uint,
                                    attribute: CTRL_ATTR, value: *const *mut c_char) -> c_int;
 
     /// XNVCtrl int query with target
@@ -91,7 +91,7 @@ extern {
     ///
     /// * `dpy` - The current X11 `Display`
     /// * `target` - Attribute query target (`CTRL_TARGET`)
-    /// * `id` - Screen id
+    /// * `id` - GPU id
     /// * `mask` - Attribute mask
     /// * `attribute` - Attribute to query (`CTRL_ATTR`)
     /// * `value` - The value of the attribute that will be populated upon function call
@@ -105,7 +105,7 @@ extern {
     ///
     /// * `dpy` - The current X11 `Display`
     /// * `target` - Attribute query target (`CTRL_TARGET`)
-    /// * `id` - Screen id
+    /// * `id` - GPU id
     /// * `mask` - Attribute mask
     /// * `attribute` - Attribute to query (`CTRL_ATTR`)
     /// * `value` - The value of the attribute that will be populated upon function call
