@@ -119,7 +119,7 @@ extern {
     ///
     /// * `dpy` - The current X11 `Display`
     /// * `target` - Attribute modification target (`CTRL_TARGET`)
-    /// * `id` - Screen id
+    /// * `id` - GPU id
     /// * `mask` - Attribute mask
     /// * `attribute` - Attribute to set (`CTRL_ATTR`)
     /// * `value` - The value of the attribute to set
