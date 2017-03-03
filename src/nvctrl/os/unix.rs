@@ -155,7 +155,7 @@ impl NvidiaControl {
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         let dpy = unsafe { XOpenDisplay(CString::new(":0").unwrap().as_ptr()) };
         if dpy.is_null() {
-            Err(format!("XNVCtrl failed: Could open display :0"))
+            Err(format!("XNVCtrl failed: Could not open display :0"))
         } else {
             // let screen = unsafe { XDefaultScreen(dpy) };
             Ok(NvidiaControl{ limits: lim, dpy: dpy/*, screen: screen */})
