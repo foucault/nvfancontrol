@@ -287,11 +287,13 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_adapter(&self) -> Result<String, String> {
+    fn get_adapter(&self, id: u32) -> Result<String, String> {
+        try!(self.check_gpu_id(id));
+
         let v: *mut c_char = unsafe { mem::uninitialized() };
         match unsafe {
-            XNVCTRLQueryTargetStringAttribute(self.dpy, CTRL_TARGET::GPU, 0, 0,
-                                              CTRL_ATTR::PRODUCT_NAME, &v)
+            XNVCTRLQueryTargetStringAttribute(self.dpy, CTRL_TARGET::GPU, id as i32,
+                                              0, CTRL_ATTR::PRODUCT_NAME, &v)
         } {
             XNV_OK => {
                 assert!(!v.is_null());

@@ -539,8 +539,12 @@ pub fn main() {
     };
 
     info!("NVIDIA driver version: {:.2}",
-             mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
-    info!("NVIDIA graphics adapter: {}", mgr.ctrl.get_adapter().unwrap());
+          mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
+    let gpu_count = mgr.ctrl.gpu_count().unwrap();
+    for i in 0u32..gpu_count {
+        info!("NVIDIA graphics adapter #{}: {}", (i+1),
+              mgr.ctrl.get_adapter(i).unwrap());
+    }
 
     let timeout = Duration::new(2, 0);
     RUNNING.store(true, Ordering::Relaxed);

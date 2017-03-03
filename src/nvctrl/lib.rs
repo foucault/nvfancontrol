@@ -52,7 +52,11 @@ pub trait NvFanController {
     fn get_version(&self) -> Result<String, String>;
 
     /// Returns the name of the graphics adapter in use
-    fn get_adapter(&self) -> Result<String, String>;
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id
+    fn get_adapter(&self, id: u32) -> Result<String, String>;
 
     /// Returns a `HashMap` containing all values of the utilization.
     /// On both Unix and Windows the following keys are available

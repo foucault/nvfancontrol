@@ -690,9 +690,12 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_adapter(&self) -> Result<String, String> {
+    fn get_adapter(&self, id: u32) -> Result<String, String> {
+        try!(self.check_gpu_id(id));
+
         let mut adapter = NvAPI_ShortString::new();
-        match unsafe { NvAPI_GPU_GetFullName(self.handles[0], &mut adapter) } {
+        let index = id as usize;
+        match unsafe { NvAPI_GPU_GetFullName(self.handles[index], &mut adapter) } {
             0 => Ok(adapter.to_string()),
             i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i))
         }
