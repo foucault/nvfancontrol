@@ -545,7 +545,7 @@ pub struct NvidiaControl {
     /// All GPU handles
     handles: [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS],
     /// Number of available GPUs in the system
-    gpu_count: u32
+    _gpu_count: u32
 }
 
 impl NvidiaControl {
@@ -560,7 +560,7 @@ impl NvidiaControl {
                 let mut count = 0 as u32;
                 match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
                     0 => Ok(NvidiaControl{ limits: lim,
-                        handles: handle, gpu_count: count }),
+                        handles: handle, _gpu_count: count }),
                     i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error: {}", i))
                 }
             },
@@ -576,6 +576,26 @@ impl Drop for NvidiaControl {
     }
 }
 
+impl NvidiaControl {
+
+    /// Check if the supplied GPU id corresponds to a physical GPU. This
+    /// function will return an `Err` if the specified id is outside the
+    /// defined boundaries or `()` otherwise.
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id to check
+    fn check_gpu_id(&self, id: u32) -> Result<(), String> {
+        if id > (self._gpu_count - 1) {
+            Err(format!("check_gpu_id() failed; id {} > {}",
+                        id, self._gpu_count - 1))
+        } else {
+            Ok(())
+        }
+    }
+
+}
+
 impl NvFanController for NvidiaControl {
 
     fn get_temp(&self) -> Result<i32, String> {
@@ -586,6 +606,9 @@ impl NvFanController for NvidiaControl {
         }
     }
 
+    fn gpu_count(&self) -> Result<u32, String> {
+        Ok((self._gpu_count))
+    }
 
     fn get_ctrl_status(&self) -> Result<NVCtrlFanControlState, String> {
         let mut cooler_settings = NvGpuCoolerSettings::new();

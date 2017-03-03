@@ -65,6 +65,9 @@ pub trait NvFanController {
     ///
     /// * `PCIe` - PCI express bus utilization (in %)
     fn get_utilization(&self) -> Result<HashMap<&str, i32>, String>;
+
+    /// Returns the number of available GPUs
+    fn gpu_count(&self) -> Result<u32, String>;
 }
 
 /// `NVCtrlFanControlState` represents the control state of a

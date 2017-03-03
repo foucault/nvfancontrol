@@ -144,7 +144,7 @@ pub struct NvidiaControl {
     /// Current lower and upper limits
     pub limits: (u16, u16),
     dpy: *mut Display,
-    //screen: c_int
+    _gpu_count: u32
 }
 
 impl NvidiaControl {
@@ -157,8 +157,17 @@ impl NvidiaControl {
         if dpy.is_null() {
             Err(format!("XNVCtrl failed: Could not open display :0"))
         } else {
-            // let screen = unsafe { XDefaultScreen(dpy) };
-            Ok(NvidiaControl{ limits: lim, dpy: dpy/*, screen: screen */})
+            let mut gpus = -1 as i32;
+            match unsafe {
+                XNVCTRLQueryTargetCount(dpy, CTRL_TARGET::GPU, &mut gpus)
+            } {
+                XNV_OK => {
+                    Ok(NvidiaControl{ limits: lim,
+                                      dpy: dpy,
+                                      _gpu_count: gpus as u32})
+                },
+                i => Err(format!("XNVCtrl QueryCount(GPU) failed; error {}", i))
+            }
         }
     }
 }
@@ -167,6 +176,26 @@ impl Drop for NvidiaControl {
     fn drop(&mut self) {
         unsafe { XCloseDisplay(self.dpy) };
     }
+}
+
+impl NvidiaControl {
+
+    /// Check if the supplied GPU id corresponds to a physical GPU. This
+    /// function will return an `Err` if the specified id is outside the
+    /// defined boundaries or `()` otherwise.
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id to check
+    fn check_gpu_id(&self, id: u32) -> Result<(), String> {
+        if id > (self._gpu_count - 1) {
+            Err(format!("check_gpu_id() failed; id {} > {}",
+                        id, self._gpu_count - 1))
+        } else {
+            Ok(())
+        }
+    }
+
 }
 
 impl NvFanController for NvidiaControl {
@@ -181,6 +210,9 @@ impl NvFanController for NvidiaControl {
         }
     }
 
+    fn gpu_count(&self) -> Result<u32, String> {
+        Ok((self._gpu_count))
+    }
 
     fn get_ctrl_status(&self) -> Result<NVCtrlFanControlState, String> {
         let mut tmp = -1 as i32;
