@@ -126,6 +126,16 @@ extern {
     fn XNVCTRLSetTargetAttributeAndGetStatus(dpy: *const Display, target: CTRL_TARGET,
                                              id: c_int, mask: c_uint, attribute: CTRL_ATTR,
                                              value: c_int) -> c_int;
+
+    /// XNVCtrl get target count
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `target` - Attribute to count (`CTRL_TARGET`)
+    /// * `value` - The value of the attribute
+    fn XNVCTRLQueryTargetCount(dpy: *const Display, target: CTRL_TARGET,
+                               value: *mut c_int) -> c_int;
 }
 
 /// NvidiaControl is the main struct that monitors and controls the
