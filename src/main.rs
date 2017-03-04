@@ -124,23 +124,23 @@ impl NVFanManager {
     }
 
     fn set_fan(&self, speed: i32) -> Result<(), String> {
-        try!(self.ctrl.set_ctrl_type(NVCtrlFanControlState::Manual));
-        try!(self.ctrl.set_fanspeed(speed));
+        try!(self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Manual));
+        try!(self.ctrl.set_fanspeed(0, speed));
         Ok(())
     }
 
     fn reset_fan(&self) -> Result<(), String> {
-        try!(self.ctrl.set_ctrl_type(NVCtrlFanControlState::Auto));
+        try!(self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Auto));
         Ok(())
     }
 
     fn update(&mut self) -> Result<(), String> {
 
-        let temp = try!(self.ctrl.get_temp()) as u16;
-        let ctrl_status = try!(self.ctrl.get_ctrl_status());
-        let rpm = try!(self.ctrl.get_fanspeed_rpm());
+        let temp = try!(self.ctrl.get_temp(0)) as u16;
+        let ctrl_status = try!(self.ctrl.get_ctrl_status(0));
+        let rpm = try!(self.ctrl.get_fanspeed_rpm(0));
 
-        let utilization = try!(self.ctrl.get_utilization());
+        let utilization = try!(self.ctrl.get_utilization(0));
         let gutil = utilization.get("graphics");
 
         let pfirst = self.points.first().unwrap();
@@ -595,17 +595,17 @@ pub fn main() {
             };
         }
 
-        let graphics_util = match mgr.ctrl.get_utilization().unwrap().get("graphics") {
+        let graphics_util = match mgr.ctrl.get_utilization(0).unwrap().get("graphics") {
             Some(v) => *v,
             None => -1
         };
 
         let mut raw_data = data.write().unwrap();
         (*raw_data).update(time::now().to_timespec().sec,
-                           mgr.ctrl.get_temp().unwrap(),
-                           mgr.ctrl.get_fanspeed().unwrap(),
-                           mgr.ctrl.get_fanspeed_rpm().unwrap(), graphics_util,
-                           mgr.ctrl.get_ctrl_status().ok());
+                           mgr.ctrl.get_temp(0).unwrap(),
+                           mgr.ctrl.get_fanspeed(0).unwrap(),
+                           mgr.ctrl.get_fanspeed_rpm(0).unwrap(), graphics_util,
+                           mgr.ctrl.get_ctrl_status(0).ok());
         drop(raw_data);
 
         let raw_data = data.read().unwrap();

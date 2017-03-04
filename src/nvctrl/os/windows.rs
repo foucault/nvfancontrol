@@ -598,9 +598,14 @@ impl NvidiaControl {
 
 impl NvFanController for NvidiaControl {
 
-    fn get_temp(&self) -> Result<i32, String> {
+    fn get_temp(&self, id: u32) -> Result<i32, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut thermal = NV_GPU_THERMAL_SETTINGS_V2::new();
-        match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[0], 0, &mut thermal) } {
+        match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[id as usize],
+                                                    0, &mut thermal) }
+        {
             0 => Ok(thermal.temp(0)),
             i => Err(format!("NvAPI_GPU_GetThermalSettings() failed; error {}", i))
         }
@@ -610,9 +615,14 @@ impl NvFanController for NvidiaControl {
         Ok((self._gpu_count))
     }
 
-    fn get_ctrl_status(&self) -> Result<NVCtrlFanControlState, String> {
+    fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[0], 0, &mut cooler_settings) } {
+        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[id as usize], 0,
+                                                   &mut cooler_settings) }
+        {
             0 => {
                 match cooler_settings.coolers[0].current_policy {
                     NV_COOLER_POLICY::MANUAL => { Ok(NVCtrlFanControlState::Manual) },
@@ -631,42 +641,57 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn set_ctrl_type(&self, typ: NVCtrlFanControlState) -> Result<(), String> {
+    fn set_ctrl_type(&self, id: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
+
+        try!(self.check_gpu_id(id));
 
         // Retain existing fanspeed
-        let fanspeed = try!(self.get_fanspeed());
+        let fanspeed = try!(self.get_fanspeed(id));
         let policy = mode_to_policy(typ);
 
         let mut levels = NvGpuCoolerLevels::new();
         levels.set_policy(0, policy);
         levels.set_level(0, fanspeed);
-        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[0], 0, &levels) } {
+        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[id as usize],
+                                                 0, &levels) }
+        {
             0 => { Ok(()) },
             i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
         }
     }
 
-    fn get_fanspeed(&self) -> Result<i32, String> {
+    fn get_fanspeed(&self, id: u32) -> Result<i32, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[0], 0, &mut cooler_settings) } {
+        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[id as usize], 0,
+                                                   &mut cooler_settings) }
+        {
             0 => Ok(cooler_settings.coolers[0].current_level),
             i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
         }
     }
 
-    fn get_fanspeed_rpm(&self) -> Result<i32, String> {
+    fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut speed = 0 as libc::c_uint;
-        match unsafe { NvAPI_GPU_GetTachReading(self.handles[0], &mut speed) } {
+        match unsafe { NvAPI_GPU_GetTachReading(self.handles[id as usize], &mut speed) } {
             0 => Ok(speed as i32),
             i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i))
         }
     }
 
-    fn set_fanspeed(&self, speed: i32) -> Result<(), String> {
+    fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String> {
+
+        try!(self.check_gpu_id(id));
+
         let true_speed = self.true_speed(speed);
 
         // Retain the existing policy
-        let policy = match self.get_ctrl_status() {
+        let policy = match self.get_ctrl_status(id) {
             Ok(mode) => mode_to_policy(mode),
             Err(e) => { return Err(e); }
         };
@@ -674,7 +699,9 @@ impl NvFanController for NvidiaControl {
         let mut levels = NvGpuCoolerLevels::new();
         levels.set_policy(0, policy);
         levels.set_level(0, true_speed as i32);
-        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[0], 0, &levels) } {
+        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[id as usize],
+                                                 0, &levels) }
+        {
             0 => { Ok(()) },
             i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
         }
@@ -691,6 +718,7 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_adapter(&self, id: u32) -> Result<String, String> {
+
         try!(self.check_gpu_id(id));
 
         let mut adapter = NvAPI_ShortString::new();
@@ -701,9 +729,14 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_utilization(&self) -> Result<HashMap<&str, i32>, String> {
+    fn get_utilization(&self, id: u32) -> Result<HashMap<&str, i32>, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut gpu_usages = NvGpuUsages::new();
-        match unsafe { NvAPI_GPU_GetUsages(self.handles[0], &mut gpu_usages) } {
+        match unsafe { NvAPI_GPU_GetUsages(self.handles[id as usize],
+                                           &mut gpu_usages) }
+        {
             0 => {
                 let mut ret: HashMap<&str, i32> = HashMap::with_capacity(3);
                 ret.insert("graphics", gpu_usages.usage[2] as i32);

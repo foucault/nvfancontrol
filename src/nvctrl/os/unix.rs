@@ -43,6 +43,7 @@ enum CTRL_ATTR {
 }
 
 /// All required foreign functions that are used in this library
+#[allow(dead_code)]
 #[link(name="X11")]
 #[link(name="Xext")]
 #[link(name="XNVCtrl")]
@@ -196,14 +197,30 @@ impl NvidiaControl {
         }
     }
 
+    /*pub fn cooler_count(&self) -> Result<u32, String> {
+
+        let mut coolers = -1 as i32;
+        match unsafe {
+            XNVCTRLQueryTargetCount(self.dpy, CTRL_TARGET::COOLER, &mut coolers)
+        } {
+            XNV_OK => Ok(coolers as u32),
+            i => Err(format!("XNVCtrl QueryCount(COOLER) failed; error {}", i))
+        }
+
+    }*/
+
 }
 
 impl NvFanController for NvidiaControl {
 
-    fn get_temp(&self) -> Result<i32, String> {
+    fn get_temp(&self, id: u32) -> Result<i32, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut tmp = -1 as i32;
         match unsafe {
-            XNVCTRLQueryAttribute(self.dpy, 0, 0, CTRL_ATTR::CORE_TEMPERATURE, &mut tmp)
+            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::GPU, id as i32, 0,
+                                        CTRL_ATTR::CORE_TEMPERATURE, &mut tmp)
         } {
             XNV_OK => Ok(tmp),
             i => Err(format!("XNVCtrl QueryAttr(CORE_TEMPERATURE) failed; error {}", i))
@@ -214,10 +231,13 @@ impl NvFanController for NvidiaControl {
         Ok((self._gpu_count))
     }
 
-    fn get_ctrl_status(&self) -> Result<NVCtrlFanControlState, String> {
+    fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut tmp = -1 as i32;
         match unsafe {
-            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::GPU, 0, 0,
+            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::GPU, id as i32, 0,
                                         CTRL_ATTR::COOLER_MANUAL_CONTROL, &mut tmp)
         } {
             XNV_OK => {
@@ -231,9 +251,12 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn set_ctrl_type(&self, typ: NVCtrlFanControlState) -> Result<(), String> {
+    fn set_ctrl_type(&self, id: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
+
+        try!(self.check_gpu_id(id));
+
         match unsafe {
-            XNVCTRLSetTargetAttributeAndGetStatus(self.dpy, CTRL_TARGET::GPU, 0, 0,
+            XNVCTRLSetTargetAttributeAndGetStatus(self.dpy, CTRL_TARGET::GPU, id as i32, 0,
                                                   CTRL_ATTR::COOLER_MANUAL_CONTROL,
                                                   typ as c_int)
         } {
@@ -242,31 +265,40 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_fanspeed(&self) -> Result<i32, String> {
+    fn get_fanspeed(&self, id: u32) -> Result<i32, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut tmp = -1 as i32;
         match unsafe {
-            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::COOLER, 0, 0,
+            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::COOLER, id as i32, 0,
                                         CTRL_ATTR::THERMAL_COOLER_CURRENT_LEVEL, &mut tmp)} {
             XNV_OK => Ok(tmp),
             i => Err(format!("XNVCtrl QueryAttr(COOLER_CURRENT_LEVEL) failed; error {}", i))
         }
     }
 
-    fn get_fanspeed_rpm(&self) -> Result<i32, String> {
+    fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String> {
+
+        try!(self.check_gpu_id(id));
+
         let mut tmp = -1 as i32;
         match unsafe {
-            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::COOLER, 0, 0,
+            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::COOLER, id as i32, 0,
                                         CTRL_ATTR::THERMAL_COOLER_SPEED, &mut tmp)} {
             XNV_OK => Ok(tmp),
             i => Err(format!("XNVCtrl QueryAttr(COOLER_SPEED) failed; error {}", i))
         }
     }
 
-    fn set_fanspeed(&self, speed: i32) -> Result<(), String> {
+    fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String> {
+
+        try!(self.check_gpu_id(id));
+
         let true_speed = self.true_speed(speed);
         match unsafe {
-            XNVCTRLSetTargetAttributeAndGetStatus(self.dpy, CTRL_TARGET::COOLER, 0, 0,
-                                                  CTRL_ATTR::THERMAL_COOLER_LEVEL,
+            XNVCTRLSetTargetAttributeAndGetStatus(self.dpy, CTRL_TARGET::COOLER, id as i32,
+                                                  0, CTRL_ATTR::THERMAL_COOLER_LEVEL,
                                                   true_speed as c_int)
         } {
             XNV_OK => Ok(()),
@@ -288,6 +320,7 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_adapter(&self, id: u32) -> Result<String, String> {
+
         try!(self.check_gpu_id(id));
 
         let v: *mut c_char = unsafe { mem::uninitialized() };
@@ -303,7 +336,10 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_utilization(&self) -> Result<HashMap<&str, i32>, String> {
+    fn get_utilization(&self, id: u32) -> Result<HashMap<&str, i32>, String> {
+
+        try!(self.check_gpu_id(id));
+
         let v: *mut c_char = unsafe { mem::uninitialized() };
         match unsafe {
             XNVCTRLQueryTargetStringAttribute(self.dpy, CTRL_TARGET::GPU, 0, 0,

@@ -23,30 +23,48 @@ pub mod os;
 /// and manipulate the GPU fan.
 pub trait NvFanController {
     /// Returns the temperature of the GPU in degrees Celsius
-    fn get_temp(&self) -> Result<i32, String>;
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id
+    fn get_temp(&self, id: u32) -> Result<i32, String>;
 
     /// Returns the control status of the cooler
-    fn get_ctrl_status(&self) -> Result<NVCtrlFanControlState, String>;
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id
+    fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String>;
 
     /// Sets the control status of the cooler
     ///
     /// **Arguments**
     ///
+    /// * `id` - The GPU id
     /// * `state` - Set the mode of fan control to either `Auto` or `Manual`
-    fn set_ctrl_type(&self, state: NVCtrlFanControlState) -> Result<(), String>;
+    fn set_ctrl_type(&self, id: u32, state: NVCtrlFanControlState) -> Result<(), String>;
 
     /// Returns the speed of the fan in %
-    fn get_fanspeed(&self) -> Result<i32, String>;
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id
+    fn get_fanspeed(&self, id: u32) -> Result<i32, String>;
 
     /// Returns the speed of the fan in RPM
-    fn get_fanspeed_rpm(&self) -> Result<i32, String>;
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id
+    fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String>;
 
     /// Sets the fan speed (in %)
     ///
     /// **Arguments**
     ///
+    /// * `id` - The GPU id
     /// * `speed` - The target speed (%)
-    fn set_fanspeed(&self, speed: i32) -> Result<(), String>;
+    fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String>;
 
     /// Returns version of the NVidia driver in use
     fn get_version(&self) -> Result<String, String>;
@@ -68,7 +86,11 @@ pub trait NvFanController {
     /// On Unix there is an additional key available
     ///
     /// * `PCIe` - PCI express bus utilization (in %)
-    fn get_utilization(&self) -> Result<HashMap<&str, i32>, String>;
+    ///
+    /// **Arguments**
+    ///
+    /// * `id` - The GPU id
+    fn get_utilization(&self, id: u32) -> Result<HashMap<&str, i32>, String>;
 
     /// Returns the number of available GPUs
     fn gpu_count(&self) -> Result<u32, String>;
