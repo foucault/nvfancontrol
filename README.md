@@ -48,11 +48,11 @@ MSVC ABI for Rust you will also need the [Visual C++ build
 tools](http://landinghub.visualstudio.com/visual-cpp-build-tools) package. If
 you are using [rustup](https://www.rustup.rs/) (which you should) you will be
 warned about this (build only)
-* the [NVAPI libraries](https://developer.nvidia.com/nvapi). Depending
-on which version you are building (x86, x64 or both) place `nvapi.lib`,
-`nvapi64.lib` or both in the root of the repository. As `nvapi` is linked
-statically there are no runtime dependencies apart from the NVidia driver
-(build only).
+* the [NVAPI libraries](https://developer.nvidia.com/nvapi) (build only).
+Depending on which version you are building (x86, x64 or both) place
+`nvapi.lib`, `nvapi64.lib` or both in the root of the repository. As `nvapi` is
+linked statically there are no runtime dependencies apart from the NVidia
+driver.
 
 For both platforms run `cargo build --release`. Upon successful compilation the
 executable can be found in `target/release/nvfancontrol`. On Linux the build
@@ -113,10 +113,22 @@ a certain temperature threshold. If you want to always use the custom curve
 pass the additional `-f` or `--force` argument. To terminate nvfancontrol send
 a SIGINT or SIGTERM on Linux or hit Ctrl-C in the console window on Windows.
 
+### Third party interfacing
+
+nvfancontrol offers two ways to dump the output of the program for integration
+with third party programs. Using the `-j` option a JSON represantation of the
+current data is printed to `stdout`. As all other messages are printed to
+`stderr` the data can be parsed by reading new-line delimited data from the
+program's `stdout`. If this is not desirable a builtin TCP server is also
+provided which can be enabled using the `-t` option. This option can optionally
+be followed by a port number (default port is 12125). The server prints the
+JSON data through the socket and immediately closes the connection. The message
+is always terminated with a new-line character.
+
 Bugs
 ----
-Although nvfancontrol should work with most newer NVidia cards it has only been
-tested with only a handful of GPUs. So it is quite possible that bugs or
+Although nvfancontrol should work with most Fermi or newer NVidia cards it has
+been tested with only a handful of GPUs. So it is quite possible that bugs or
 unexpected behaviour might surface. In that case please open an issue in the
 bug tracker including the complete program output (use the `--debug` option).
 
