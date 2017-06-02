@@ -12,7 +12,7 @@ serde_json = "*"
 serde_derive = "*"
 
 [target.'cfg(unix)'.dependencies]
-xdg = "2.0.0-pre7"
+xdg = "*"
 nix = "*"
 
 [target.'cfg(windows)'.dependencies]
