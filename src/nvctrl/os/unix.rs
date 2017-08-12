@@ -1,7 +1,8 @@
 use libc::{c_int, c_char, c_void, c_uint};
 use std::collections::HashMap;
 use std::mem;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
+use std::ptr;
 use ::{NVCtrlFanControlState, NvFanController};
 
 const XNV_OK: i32 = 1;
@@ -153,9 +154,9 @@ impl NvidiaControl {
     /// `init()` should be called when calling `NvidiaControl::new()` so
     /// there is no need to call it directly.
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
-        let dpy = unsafe { XOpenDisplay(CString::new(":0").unwrap().as_ptr()) };
+        let dpy = unsafe { XOpenDisplay(ptr::null()) };
         if dpy.is_null() {
-            Err(format!("XNVCtrl failed: Could not open display :0"))
+            Err(format!("XNVCtrl failed: XOpenDisplay failed; is $DISPLAY set?"))
         } else {
             let mut gpus = -1 as i32;
             match unsafe {
