@@ -1,6 +1,6 @@
 [package]
 name = "nvfancontrol"
-version = "0.3.0"
+version = "0.3.99"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 
 [dependencies]
