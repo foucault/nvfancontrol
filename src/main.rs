@@ -3,7 +3,7 @@ use nvctrl::{NvFanController, NvidiaControl, NVCtrlFanControlState};
 
 #[macro_use]
 extern crate log;
-use log::{Log, LogRecord, LogLevelFilter, LogMetadata, SetLoggerError};
+use log::{Log, Record, LevelFilter, Metadata};
 
 extern crate getopts;
 use getopts::Options;
@@ -50,28 +50,22 @@ const DEFAULT_CURVE: [(u16, u16); 7] = [(41, 20), (49, 30), (57, 45), (66, 55),
 
 static RUNNING: AtomicBool = ATOMIC_BOOL_INIT;
 static SRVING: AtomicBool = ATOMIC_BOOL_INIT;
+static LOGGER: Logger = Logger;
 
 struct Logger;
 
 impl Log for Logger {
-    fn enabled(&self, metadata: &LogMetadata) -> bool {
-        metadata.level() <= log::max_log_level()
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= log::max_level()
     }
 
-    fn log(&self, record: &LogRecord) {
+    fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             errln!("{} - {}", record.level(), record.args());
         }
     }
-}
 
-impl Logger {
-    pub fn new(level: LogLevelFilter) -> Result<(), SetLoggerError> {
-        log::set_logger(|max_level| {
-            max_level.set(level);
-            Box::new(Logger)
-        })
-    }
+    fn flush(&self) { }
 }
 
 struct NVFanManager {
@@ -472,15 +466,13 @@ pub fn main() {
     }
 
     let log_level = if matches.opt_present("d") {
-        LogLevelFilter::Debug
+        LevelFilter::Debug
     } else {
-        LogLevelFilter::Info
+        LevelFilter::Info
     };
 
-    match Logger::new(log_level) {
-        Ok(v) => v,
-        Err(err) => panic!("Could not start logger: {:?}", err)
-    };
+    log::set_logger(&LOGGER).unwrap();
+    log::set_max_level(log_level);
 
     let force_update = matches.opt_present("f");
 
