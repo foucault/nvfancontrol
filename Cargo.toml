@@ -1,22 +1,22 @@
 [package]
 name = "nvfancontrol"
-version = "0.3.99"
+version = "0.3.2"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 
 [dependencies]
-log = "*"
-getopts = "*"
-time = "*"
-serde = "*"
-serde_json = "*"
-serde_derive = "*"
+log = "0.4.0"
+getopts = "0.2.15"
+time = "0.1.38"
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
 
 [target.'cfg(unix)'.dependencies]
-xdg = "*"
-nix = "*"
+xdg = "2.1.0"
+nix = "0.8.1"
 
 [target.'cfg(windows)'.dependencies]
-ctrlc = "*"
+ctrlc = "3.0.3"
 
 [dependencies.nvctrl]
 path = "src/nvctrl"
