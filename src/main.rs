@@ -13,9 +13,7 @@ use getopts::Options;
 #[cfg(unix)] use nix::sys::signal;
 
 extern crate time;
-
-#[cfg(unix)] extern crate xdg;
-#[cfg(unix)] use xdg::BaseDirectories;
+extern crate dirs;
 
 #[macro_use] extern crate serde_derive;
 extern crate serde_json;
@@ -276,29 +274,16 @@ fn make_limits(res: String) -> Result<Option<(u16,u16)>, String> {
     }
 }
 
-#[cfg(unix)]
-fn find_config_file() -> Option<PathBuf> {
-    match BaseDirectories::new() {
-        Ok(x) => {
-            x.find_config_file(CONF_FILE)
-        },
-        Err(e) => {
-            warn!("Could not find xdg conformant dirs: {}", e);
-            None
-        }
-    }
-}
 
-#[cfg(windows)]
 fn find_config_file() -> Option<PathBuf> {
-    match env::home_dir() {
+    match dirs::config_dir() {
         Some(path) => {
             let mut conf_path = PathBuf::from(path.to_str().unwrap());
             conf_path.push(CONF_FILE);
             Some(conf_path)
         },
         None => {
-            warn!("Could not find home directory; no config file available");
+            warn!("Could not find config directory; no config file available");
             None
         }
     }

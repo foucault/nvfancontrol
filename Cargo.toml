@@ -10,9 +10,9 @@ time = "*"
 serde = "*"
 serde_json = "*"
 serde_derive = "*"
+dirs = "*"
 
 [target.'cfg(unix)'.dependencies]
-xdg = "*"
 nix = "*"
 
 [target.'cfg(windows)'.dependencies]
