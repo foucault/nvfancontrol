@@ -30,16 +30,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::net::{TcpListener, TcpStream, Shutdown};
 
-// http://stackoverflow.com/questions/27588416/how-to-send-output-to-stderr
-macro_rules! errln(
-    ($($arg:tt)*) => (
-        match writeln!(&mut ::std::io::stderr(), $($arg)* ) {
-            Ok(_) => {},
-            Err(x) => panic!("Unable to write to stderr: {}", x),
-        }
-    )
-);
-
 const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
 const DEFAULT_PORT: u32 = 12125;
@@ -59,7 +49,7 @@ impl Log for Logger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            errln!("{} - {}", record.level(), record.args());
+            eprintln!("{} - {}", record.level(), record.args());
         }
     }
 
