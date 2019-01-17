@@ -77,7 +77,7 @@ impl NVFanManager {
             points: Vec<(u16, u16)>, force: bool, limits: Option<(u16, u16)>
         ) -> Result<NVFanManager, String> {
 
-        let ctrl = try!(NvidiaControl::new(limits));
+        let ctrl = NvidiaControl::new(limits)?;
         let version: f32 = match ctrl.get_version() {
             Ok(v) => {
                 v.parse::<f32>().unwrap()
@@ -106,23 +106,23 @@ impl NVFanManager {
     }
 
     fn set_fan(&self, speed: i32) -> Result<(), String> {
-        try!(self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Manual));
-        try!(self.ctrl.set_fanspeed(0, speed));
+        self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Manual)?;
+        self.ctrl.set_fanspeed(0, speed)?;
         Ok(())
     }
 
     fn reset_fan(&self) -> Result<(), String> {
-        try!(self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Auto));
+        self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Auto)?;
         Ok(())
     }
 
     fn update(&mut self) -> Result<(), String> {
 
-        let temp = try!(self.ctrl.get_temp(0)) as u16;
-        let ctrl_status = try!(self.ctrl.get_ctrl_status(0));
-        let rpm = try!(self.ctrl.get_fanspeed_rpm(0));
+        let temp = self.ctrl.get_temp(0)? as u16;
+        let ctrl_status = self.ctrl.get_ctrl_status(0)?;
+        let rpm = self.ctrl.get_fanspeed_rpm(0)?;
 
-        let utilization = try!(self.ctrl.get_utilization(0));
+        let utilization = self.ctrl.get_utilization(0)?;
         let gutil = utilization.get("graphics");
 
         let pfirst = self.points.first().unwrap();

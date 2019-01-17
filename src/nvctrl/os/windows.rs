@@ -600,7 +600,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_temp(&self, id: u32) -> Result<i32, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut thermal = NV_GPU_THERMAL_SETTINGS_V2::new();
         match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[id as usize],
@@ -617,7 +617,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut cooler_settings = NvGpuCoolerSettings::new();
         match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[id as usize], 0,
@@ -643,10 +643,10 @@ impl NvFanController for NvidiaControl {
 
     fn set_ctrl_type(&self, id: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         // Retain existing fanspeed
-        let fanspeed = try!(self.get_fanspeed(id));
+        let fanspeed = self.get_fanspeed(id)?;
         let policy = mode_to_policy(typ);
 
         let mut levels = NvGpuCoolerLevels::new();
@@ -662,7 +662,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_fanspeed(&self, id: u32) -> Result<i32, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut cooler_settings = NvGpuCoolerSettings::new();
         match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[id as usize], 0,
@@ -675,7 +675,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut speed = 0 as libc::c_uint;
         match unsafe { NvAPI_GPU_GetTachReading(self.handles[id as usize], &mut speed) } {
@@ -686,7 +686,7 @@ impl NvFanController for NvidiaControl {
 
     fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let true_speed = self.true_speed(speed);
 
@@ -719,7 +719,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_adapter(&self, id: u32) -> Result<String, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut adapter = NvAPI_ShortString::new();
         let index = id as usize;
@@ -731,7 +731,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_utilization(&self, id: u32) -> Result<HashMap<&str, i32>, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut gpu_usages = NvGpuUsages::new();
         match unsafe { NvAPI_GPU_GetUsages(self.handles[id as usize],

@@ -216,7 +216,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_temp(&self, id: u32) -> Result<i32, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut tmp = -1 as i32;
         match unsafe {
@@ -229,12 +229,12 @@ impl NvFanController for NvidiaControl {
     }
 
     fn gpu_count(&self) -> Result<u32, String> {
-        Ok((self._gpu_count))
+        Ok(self._gpu_count)
     }
 
     fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut tmp = -1 as i32;
         match unsafe {
@@ -254,7 +254,7 @@ impl NvFanController for NvidiaControl {
 
     fn set_ctrl_type(&self, id: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         match unsafe {
             XNVCTRLSetTargetAttributeAndGetStatus(self.dpy, CTRL_TARGET::GPU, id as i32, 0,
@@ -268,7 +268,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_fanspeed(&self, id: u32) -> Result<i32, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut tmp = -1 as i32;
         match unsafe {
@@ -281,7 +281,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let mut tmp = -1 as i32;
         match unsafe {
@@ -294,7 +294,7 @@ impl NvFanController for NvidiaControl {
 
     fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let true_speed = self.true_speed(speed);
         match unsafe {
@@ -322,7 +322,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_adapter(&self, id: u32) -> Result<String, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let v: *mut c_char = unsafe { mem::uninitialized() };
         match unsafe {
@@ -339,7 +339,7 @@ impl NvFanController for NvidiaControl {
 
     fn get_utilization(&self, id: u32) -> Result<HashMap<&str, i32>, String> {
 
-        try!(self.check_gpu_id(id));
+        self.check_gpu_id(id)?;
 
         let v: *mut c_char = unsafe { mem::uninitialized() };
         match unsafe {
