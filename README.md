@@ -45,9 +45,10 @@ You will need:
 * the Rust compiler toolchain, stable >=1.15 or nightly. Be adviced that you
 need the **MSVC ABI** version of the toolchain not GNU. In order to target the
 MSVC ABI for Rust you will also need the [Visual C++ build
-tools](http://landinghub.visualstudio.com/visual-cpp-build-tools) package. If
-you are using [rustup](https://www.rustup.rs/) (which you should) you will be
-warned about this (build only)
+tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2017)
+package or any recent version of Visual Studio (2015+). If you are using
+[rustup](https://www.rustup.rs/) (which you should) you will be warned about
+this (build only)
 * the [NVAPI libraries](https://developer.nvidia.com/nvapi) (build only).
 Depending on which version you are building (x86, x64 or both) place
 `nvapi.lib`, `nvapi64.lib` or both in the root of the repository. As `nvapi` is
@@ -88,8 +89,9 @@ To run the program just execute the `nvfancontrol` binary. Add the `-d` or
 custom configuration file. On Linux create a file named `nvfancontrol.conf`
 under the XDG configuration directory (`~/.config` or `/etc/xdg` for per-user
 and system-wide basis respectively). On Windows create the file in
-``C:\Users\[USERNAME]\``. The configuration file should contain pairs of
-whitespace delimited parameters (Temperature degrees Celsius, Fan Speed %).
+`C:\Users\[USERNAME]\AppData\Roaming` instead. The configuration file should
+contain pairs of whitespace delimited parameters (Temperature degrees Celsius,
+Fan Speed %).
 For example
 
     30    20
