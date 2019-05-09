@@ -1,8 +1,7 @@
-use libc::{c_int, c_char, c_void, c_uint};
+use libc::{c_int, c_char, c_uchar, c_void, c_uint};
 use std::collections::HashMap;
-use std::mem;
+use std::{mem, ptr, slice};
 use std::ffi::CStr;
-use std::ptr;
 use ::{NVCtrlFanControlState, NvFanController};
 
 const XNV_OK: i32 = 1;
@@ -41,6 +40,34 @@ enum CTRL_ATTR {
     THERMAL_COOLER_LEVEL = 320,
     THERMAL_COOLER_SPEED = 405,
     THERMAL_COOLER_CURRENT_LEVEL = 417,
+}
+
+/// XNVCtrl Binary Attribute (non exchaustive)
+#[allow(dead_code)]
+#[allow(non_camel_case_types)]
+#[repr(u32)]
+enum BIN_ATTR {
+    EDID = 0,
+    MODELINES = 1,
+    METAMODES = 2,
+    XSCREENS_USING_GPU = 3,
+    GPUS_USED_BY_XSCREEN = 4,
+    GPUS_USING_FRAMELOCK = 5,
+    DISPLAY_VIEWPORT = 6,
+    FRAMELOCKS_USED_BY_GPU = 7,
+    GPUS_USING_VCSC = 8,
+    VCSCS_USED_BY_GPU = 9,
+    COOLERS_USED_BY_GPU = 10,
+    GPUS_USED_BY_LOGICAL_XSCREEN = 11,
+    THERMAL_SENSORS_USED_BY_GPU = 12,
+    GLASSES_PAIRED_TO_3D_VISION_PRO_TRANSCEIVERS = 13,
+    DISPLAY_TARGETS = 14,
+    DISPLAYS_CONNECTED_TO_GPU = 15,
+    METAMODES_VERSION_2 = 16,
+    DISPLAYS_ENABLED_ON_XSCREEN = 17,
+    DISPLAYS_ASSIGNED_TO_XSCREEN = 18,
+    GPU_FLAGS = 19,
+    DATA_DISPLAYS_ON_GPU = 20
 }
 
 /// All required foreign functions that are used in this library
@@ -138,6 +165,21 @@ extern {
     /// * `value` - The value of the attribute
     fn XNVCTRLQueryTargetCount(dpy: *const Display, target: CTRL_TARGET,
                                value: *mut c_int) -> c_int;
+
+    /// XNVCtrl get target binary data
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `target` - Attribute to count (`CTRL_TARGET`)
+    /// * `id` - GPU id
+    /// * `mask` - Attribute mask
+    /// * `attribute` - Attribute to get (`CTRL_ATTR`)
+    /// * `data` - The value of the attribute
+    /// * `len` - The length of the data
+    fn XNVCTRLQueryTargetBinaryData(dpy: *const Display, target: CTRL_TARGET,
+                                    id: c_int, mask: c_uint, attribute: BIN_ATTR,
+                                    data: *const *mut c_uchar, len: *mut c_int) -> c_int;
 }
 
 /// NvidiaControl is the main struct that monitors and controls the
@@ -198,18 +240,6 @@ impl NvidiaControl {
         }
     }
 
-    /*pub fn cooler_count(&self) -> Result<u32, String> {
-
-        let mut coolers = -1 as i32;
-        match unsafe {
-            XNVCTRLQueryTargetCount(self.dpy, CTRL_TARGET::COOLER, &mut coolers)
-        } {
-            XNV_OK => Ok(coolers as u32),
-            i => Err(format!("XNVCtrl QueryCount(COOLER) failed; error {}", i))
-        }
-
-    }*/
-
 }
 
 impl NvFanController for NvidiaControl {
@@ -230,6 +260,55 @@ impl NvFanController for NvidiaControl {
 
     fn gpu_count(&self) -> Result<u32, String> {
         Ok(self._gpu_count)
+    }
+
+    /*fn cooler_count(&self) -> Result<u32, String> {
+
+        let mut coolers = -1 as i32;
+        match unsafe {
+            XNVCTRLQueryTargetCount(self.dpy, CTRL_TARGET::COOLER, &mut coolers)
+        } {
+            XNV_OK => Ok(coolers as u32),
+            i => Err(format!("XNVCtrl QueryCount(COOLER) failed; error {}", i))
+        }
+
+    }*/
+
+    fn gpu_coolers(&self, id: u32) -> Result<Vec<u32>, String> {
+
+        self.check_gpu_id(id)?;
+
+        let mut len = -1 as i32;
+        let v: *mut c_uchar = unsafe { mem::uninitialized() };
+
+        match unsafe {
+            XNVCTRLQueryTargetBinaryData(self.dpy, CTRL_TARGET::GPU, id as i32, 0,
+                                         BIN_ATTR::COOLERS_USED_BY_GPU, &v , &mut len)
+        } {
+            XNV_OK => {
+                // convert unsigned char** to int** (array of ints)
+                let raw = unsafe { mem::transmute::<*mut c_uchar, *mut c_int>(v) };
+
+                // NVCtrl stores the number of coolers in the first int of the response
+                // array rather than the `len` variable; I know, it's unintuitive. So we
+                // need to actually read the first int from the `raw` array to find out
+                // how many coolers the GPU has. The `raw` array always has a length of
+                // NUM_OF_GPU_COOLERS + 1 and it is populated with the indices of said
+                // coolers.
+                let num_coolers = unsafe { ptr::read(raw) } as usize;
+                let array: &[c_int] = unsafe{ slice::from_raw_parts(raw, 1usize+num_coolers) };
+
+                let mut res: Vec<u32> = Vec::with_capacity(num_coolers);
+
+                for x in 0..(num_coolers) {
+                    res.push(array[x+1] as u32);
+                }
+
+                Ok(res)
+            },
+            i => Err(format!("XNVCtrl BinaryData(COOLERS_USED_BY_GPU) failed; error {}", i))
+        }
+
     }
 
     fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {

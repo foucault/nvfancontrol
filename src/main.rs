@@ -511,6 +511,15 @@ pub fn main() {
     for i in 0u32..gpu_count {
         info!("NVIDIA graphics adapter #{}: {}", (i+1),
               mgr.ctrl.get_adapter(i).unwrap());
+        match mgr.ctrl.gpu_coolers(i) {
+            Ok(array) => {
+                info!("  GPU #{} coolers: {}", i+1,
+                      array.iter()
+                           .map(|x| format!("COOLER-{}", x))
+                           .collect::<Vec<String>>().join(", "));
+            },
+            Err(_) => { warn!("Could not get GPU cooler indices or unsupported OS") }
+        };
     }
 
     let timeout = Duration::new(2, 0);

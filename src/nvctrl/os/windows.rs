@@ -615,6 +615,10 @@ impl NvFanController for NvidiaControl {
         Ok((self._gpu_count))
     }
 
+    fn gpu_coolers(&self, id: u32) -> Result<Vec<u32>, String> {
+        Err(format!("gpu_coolers is unimplemented", i))
+    }
+
     fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {
 
         self.check_gpu_id(id)?;

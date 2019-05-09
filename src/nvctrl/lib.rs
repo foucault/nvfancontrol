@@ -94,6 +94,12 @@ pub trait NvFanController {
 
     /// Returns the number of available GPUs
     fn gpu_count(&self) -> Result<u32, String>;
+
+    /*/// Returns the number of available coolers
+    fn cooler_count(&self) -> Result<u32, String>;*/
+
+    /// Returns the cooler ids of specified GPU
+    fn gpu_coolers(&self, id: u32) -> Result<Vec<u32>, String>;
 }
 
 /// `NVCtrlFanControlState` represents the control state of a
