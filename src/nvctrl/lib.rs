@@ -26,45 +26,48 @@ pub trait NvFanController {
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id
-    fn get_temp(&self, id: u32) -> Result<i32, String>;
+    /// * `gpu` - The GPU id
+    fn get_temp(&self, gpu: u32) -> Result<i32, String>;
 
     /// Returns the control status of the cooler
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id
-    fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String>;
+    /// * `gpu` - The GPU id
+    fn get_ctrl_status(&self, gpu: u32) -> Result<NVCtrlFanControlState, String>;
 
     /// Sets the control status of the cooler
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id
+    /// * `gpu` - The GPU id
     /// * `state` - Set the mode of fan control to either `Auto` or `Manual`
-    fn set_ctrl_type(&self, id: u32, state: NVCtrlFanControlState) -> Result<(), String>;
+    fn set_ctrl_type(&self, gpu: u32, state: NVCtrlFanControlState) -> Result<(), String>;
 
     /// Returns the speed of the fan in %
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id
-    fn get_fanspeed(&self, id: u32) -> Result<i32, String>;
+    /// * `gpu` - The GPU id
+    /// * `id` - The COOLER id
+    fn get_fanspeed(&self, gpu: u32, id: u32) -> Result<i32, String>;
 
     /// Returns the speed of the fan in RPM
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id
-    fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String>;
+    /// * `gpu` - The GPU id
+    /// * `id` - The COOLER id
+    fn get_fanspeed_rpm(&self, gpu: u32, id: u32) -> Result<i32, String>;
 
     /// Sets the fan speed (in %)
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id
+    /// * `gpu` - The GPU id
+    /// * `id` - The COOLER id
     /// * `speed` - The target speed (%)
-    fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String>;
+    fn set_fanspeed(&self, gpu: u32, id: u32, speed: i32) -> Result<(), String>;
 
     /// Returns version of the NVidia driver in use
     fn get_version(&self) -> Result<String, String>;
@@ -99,7 +102,11 @@ pub trait NvFanController {
     fn cooler_count(&self) -> Result<u32, String>;*/
 
     /// Returns the cooler ids of specified GPU
-    fn gpu_coolers(&self, id: u32) -> Result<Vec<u32>, String>;
+    ///
+    /// ** Arguments **
+    ///
+    /// * gpu: The GPU id
+    fn gpu_coolers(&self, gpu: u32) -> Result<&Vec<u32>, String>;
 }
 
 /// `NVCtrlFanControlState` represents the control state of a

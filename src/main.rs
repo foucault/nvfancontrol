@@ -57,6 +57,7 @@ impl Log for Logger {
 }
 
 struct NVFanManager {
+    gpu: u32,
     ctrl: NvidiaControl,
     points: Vec<(u16, u16)>,
     on_time: Option<f64>,
@@ -74,10 +75,11 @@ impl Drop for NVFanManager {
 
 impl NVFanManager {
     fn new(
-            points: Vec<(u16, u16)>, force: bool, limits: Option<(u16, u16)>
+            gpu: u32, points: Vec<(u16, u16)>, force: bool, limits: Option<(u16, u16)>
         ) -> Result<NVFanManager, String> {
 
         let ctrl = NvidiaControl::new(limits)?;
+        let gpu_count = ctrl.gpu_count()?;
         let version: f32 = match ctrl.get_version() {
             Ok(v) => {
                 v.parse::<f32>().unwrap()
@@ -93,9 +95,14 @@ impl NVFanManager {
             return Err(err);
         }
 
+        if gpu > gpu_count-1 {
+            return Err(format!("GPU id {} is not valid; min: 0 max: {}", gpu, gpu_count-1));
+        }
+
         debug!("Curve points: {:?}", points);
 
         let ret = NVFanManager {
+            gpu: gpu,
             ctrl: ctrl,
             points: points,
             on_time: None,
@@ -105,28 +112,44 @@ impl NVFanManager {
         Ok(ret)
     }
 
-    fn set_fan(&self, speed: i32) -> Result<(), String> {
-        self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Manual)?;
-        self.ctrl.set_fanspeed(0, speed)?;
+    fn set_fan(&self, id: u32, speed: i32) -> Result<(), String> {
+        self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Manual)?;
+        self.ctrl.set_fanspeed(self.gpu, id, speed)?;
+        Ok(())
+    }
+
+    fn set_fans(&self, speed: i32) -> Result<(), String> {
+        self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Manual)?;
+        let coolers = self.ctrl.gpu_coolers(self.gpu)?;
+        for c in coolers {
+            self.ctrl.set_fanspeed(self.gpu, *c, speed)?;
+        }
         Ok(())
     }
 
     fn reset_fan(&self) -> Result<(), String> {
-        self.ctrl.set_ctrl_type(0, NVCtrlFanControlState::Auto)?;
+        self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Auto)?;
         Ok(())
     }
 
     fn update(&mut self) -> Result<(), String> {
 
-        let temp = self.ctrl.get_temp(0)? as u16;
-        let ctrl_status = self.ctrl.get_ctrl_status(0)?;
-        let rpm = self.ctrl.get_fanspeed_rpm(0)?;
+        let temp = self.ctrl.get_temp(self.gpu)? as u16;
+        let ctrl_status = self.ctrl.get_ctrl_status(self.gpu)?;
+        let coolers = self.ctrl.gpu_coolers(self.gpu)?;
 
-        let utilization = self.ctrl.get_utilization(0)?;
+        if coolers.len() == 0 {
+            return Err("No coolers available to adjust".to_string());
+        }
+
+        let rpm = self.ctrl.get_fanspeed_rpm(self.gpu, coolers[0])?;
+
+        let utilization = self.ctrl.get_utilization(self.gpu)?;
         let gutil = utilization.get("graphics");
 
         let pfirst = self.points.first().unwrap();
         let plast = self.points.last().unwrap();
+
 
         if rpm > 0 && !self.force {
             if let NVCtrlFanControlState::Auto = ctrl_status {
@@ -144,7 +167,7 @@ impl NVFanManager {
             // if utilization can't be retrieved the utilization leg is
             // always false and ignored
             if dif < 240.0 || gutil.unwrap_or(&-1) > &25 {
-                if let Err(e) = self.set_fan(pfirst.1 as i32) { return Err(e); }
+                if let Err(e) = self.set_fans(pfirst.1 as i32) { return Err(e); }
             } else {
                 debug!("Grace period expired; turning fan off");
                 self.on_time = None;
@@ -155,7 +178,9 @@ impl NVFanManager {
         if temp > plast.0 {
             debug!("Temperature outside curve; setting to max");
 
-            if let Err(e) = self.set_fan(plast.1 as i32) { return Err(e); }
+            for c in coolers {
+                if let Err(e) = self.set_fan(*c, plast.1 as i32) { return Err(e); }
+            }
 
             return Ok(());
         }
@@ -173,7 +198,8 @@ impl NVFanManager {
                 let y = (p1.1 as f32) + (((temp - p1.0) as f32) * slope);
 
                 self.on_time = Some(time::precise_time_s());
-                if let Err(e) = self.set_fan(y as i32) { return Err(e); }
+
+                if let Err(e) = self.set_fans(y as i32) { return Err(e); }
 
                 return Ok(());
             }
@@ -342,6 +368,8 @@ fn make_options() -> Options {
     opts.optopt("l", "limits",
         "Comma separated lower and upper limits, use 0 to disable,
         default: 20,80", "LOWER,UPPER");
+    opts.optopt("g", "gpu", "GPU to adjust; must be > 0", "GPU");
+    opts.optflag("p", "print-coolers", "Print available GPUs and coolers");
     opts.optflag("f", "force", "Always use the custom curve even if the fan is
                  already spinning in auto mode");
     opts.optflag("m", "monitor-only", "Do not update the fan speed and control
@@ -363,42 +391,62 @@ fn print_usage(program: &str, opts: Options) {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Data {
+struct GPUData {
     timespec: i64,
     temp: i32,
-    speed: i32,
-    rpm: i32,
+    speed: Vec<i32>,
+    rpm: Vec<i32>,
     load: i32,
     mode: Option<NVCtrlFanControlState>
 }
 
-impl Data {
-    fn update(&mut self, timespec: i64, temp: i32, speed: i32,
-              rpm: i32, load: i32,
-              mode: Option<NVCtrlFanControlState>) {
+impl GPUData {
+
+    fn update_from_mgr(&mut self, timespec: i64, mgr: &NVFanManager, gpu: u32) {
         self.timespec = timespec;
-        self.temp = temp;
-        self.speed = speed;
-        self.rpm = rpm;
-        self.load = load;
-        self.mode = mode;
+        self.temp = mgr.ctrl.get_temp(gpu).unwrap();
+        self.load = match mgr.ctrl.get_utilization(gpu).unwrap().get("graphics") {
+            Some(v) => *v,
+            None => -1
+        };
+        self.mode = mgr.ctrl.get_ctrl_status(gpu).ok();
+        let coolers_ref = mgr.ctrl.gpu_coolers(gpu).unwrap();
+        for i in 0..coolers_ref.len() {
+            self.rpm[i] = mgr.ctrl.get_fanspeed_rpm(gpu, coolers_ref[i]).unwrap();
+            self.speed[i] = mgr.ctrl.get_fanspeed(gpu, coolers_ref[i]).unwrap();
+        }
+
     }
 }
 
-impl Default for Data {
-   fn default() -> Data {
-       Data {
-           timespec: -1,
-           temp: -99,
-           speed: -1,
-           rpm: -1,
-           load: -1,
-           mode: None
-       }
-   }
+impl GPUData {
+    fn new(mgr: &NVFanManager, gpu: u32) -> Result<GPUData, String> {
+
+        let coolers = mgr.ctrl.gpu_coolers(gpu)?;
+        let temp = mgr.ctrl.get_temp(gpu)?;
+        let mut speed: Vec<i32> = Vec::with_capacity(coolers.len());
+        let mut rpm: Vec<i32> = Vec::with_capacity(coolers.len());
+
+        for i in 0..coolers.len() {
+            let current_speed = mgr.ctrl.get_fanspeed(gpu, coolers[i])?;
+            let current_rpm = mgr.ctrl.get_fanspeed_rpm(gpu, coolers[i])?;
+            speed.push(current_speed);
+            rpm.push(current_rpm);
+        }
+
+
+        Ok(GPUData {
+            timespec: -1,
+            temp: temp,
+            speed: speed,
+            rpm: rpm,
+            load: -1,
+            mode: None
+        })
+    }
 }
 
-fn serve_tcp(data: Arc<RwLock<Data>>, port: u32) {
+fn serve_tcp(data: Arc<RwLock<GPUData>>, port: u32) {
     let l = TcpListener::bind(format!(":::{}", port).as_str()).unwrap();
     SRVING.store(true, Ordering::Relaxed);
     info!("Spinning up TCP server at {:?}", l.local_addr().unwrap());
@@ -425,6 +473,25 @@ fn serve_tcp(data: Arc<RwLock<Data>>, port: u32) {
     debug!("TCP server terminated")
 }
 
+fn list_gpus_and_coolers() -> Result<(), String> {
+    let ctrl = NvidiaControl::new(None)?;
+    let gpu_count = ctrl.gpu_count()?;
+
+    println!("Found {} available GPU(s)", gpu_count);
+
+    for gpu in 0..gpu_count {
+        let name = ctrl.get_adapter(gpu)?;
+        println!("GPU #{}: {} ", gpu, name);
+        let coolers = ctrl.gpu_coolers(gpu)?;
+        for c in coolers {
+            println!(" COOLER-{}", c)
+        }
+    }
+
+    Ok(())
+
+}
+
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -437,6 +504,11 @@ pub fn main() {
 
     if matches.opt_present("h") {
         print_usage(&args[0].clone(), opts);
+        return;
+    }
+
+    if matches.opt_present("p") {
+        if let Err(e) = list_gpus_and_coolers() { error!("Failed to list adapters: {}", e); }
         return;
     }
 
@@ -473,6 +545,25 @@ pub fn main() {
         limits = Some((20, 80));
     }
 
+    let gpu: u32;
+
+    if matches.opt_present("g") {
+        gpu = match matches.opt_str("g") {
+            Some(g) => {
+                match g.parse::<u32>() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        error!("Option \"-g\" present but non-valid: \"{}\": {}", e, g);
+                        process::exit(1);
+                    }
+                }
+            },
+            None => { 0 }
+        }
+    } else {
+        gpu = 0;
+    }
+
     match register_signal_handlers() {
         Ok(_) => {},
         Err(e) => {
@@ -497,7 +588,7 @@ pub fn main() {
         }
     };
 
-    let mut mgr = match NVFanManager::new(curve, force_update, limits) {
+    let mut mgr = match NVFanManager::new(gpu, curve, force_update, limits) {
         Ok(m) => m,
         Err(s) => {
             error!("{}", s);
@@ -509,11 +600,11 @@ pub fn main() {
           mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
     let gpu_count = mgr.ctrl.gpu_count().unwrap();
     for i in 0u32..gpu_count {
-        info!("NVIDIA graphics adapter #{}: {}", (i+1),
+        info!("NVIDIA graphics adapter #{}: {}", i,
               mgr.ctrl.get_adapter(i).unwrap());
         match mgr.ctrl.gpu_coolers(i) {
             Ok(array) => {
-                info!("  GPU #{} coolers: {}", i+1,
+                info!("  GPU #{} coolers: {}", i,
                       array.iter()
                            .map(|x| format!("COOLER-{}", x))
                            .collect::<Vec<String>>().join(", "));
@@ -532,7 +623,7 @@ pub fn main() {
 
     let json_output = matches.opt_present("j");
 
-    let data = Arc::new(RwLock::new(Data::default()));
+    let data = Arc::new(RwLock::new(GPUData::new(&mgr, 0).unwrap()));
 
     let server_port = if matches.opt_present("t") {
         let srv_data = data.clone();
@@ -571,21 +662,12 @@ pub fn main() {
             };
         }
 
-        let graphics_util = match mgr.ctrl.get_utilization(0).unwrap().get("graphics") {
-            Some(v) => *v,
-            None => -1
-        };
-
         let mut raw_data = data.write().unwrap();
-        (*raw_data).update(time::now().to_timespec().sec,
-                           mgr.ctrl.get_temp(0).unwrap(),
-                           mgr.ctrl.get_fanspeed(0).unwrap(),
-                           mgr.ctrl.get_fanspeed_rpm(0).unwrap(), graphics_util,
-                           mgr.ctrl.get_ctrl_status(0).ok());
+        (*raw_data).update_from_mgr(time::now().to_timespec().sec, &mgr, 0);
         drop(raw_data);
 
         let raw_data = data.read().unwrap();
-        debug!("Temp: {}; Speed: {} RPM ({}%); Load: {}%; Mode: {}",
+        debug!("Temp: {}; Speed: {:?} RPM ({:?}%); Load: {}%; Mode: {}",
             raw_data.temp, raw_data.rpm, raw_data.speed, raw_data.load,
             match raw_data.mode {
                 Some(NVCtrlFanControlState::Auto) => "Auto",
