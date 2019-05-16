@@ -401,25 +401,6 @@ struct GPUData {
 }
 
 impl GPUData {
-
-    fn update_from_mgr(&mut self, timespec: i64, mgr: &NVFanManager, gpu: u32) {
-        self.timespec = timespec;
-        self.temp = mgr.ctrl.get_temp(gpu).unwrap();
-        self.load = match mgr.ctrl.get_utilization(gpu).unwrap().get("graphics") {
-            Some(v) => *v,
-            None => -1
-        };
-        self.mode = mgr.ctrl.get_ctrl_status(gpu).ok();
-        let coolers_ref = mgr.ctrl.gpu_coolers(gpu).unwrap();
-        for i in 0..coolers_ref.len() {
-            self.rpm[i] = mgr.ctrl.get_fanspeed_rpm(gpu, coolers_ref[i]).unwrap();
-            self.speed[i] = mgr.ctrl.get_fanspeed(gpu, coolers_ref[i]).unwrap();
-        }
-
-    }
-}
-
-impl GPUData {
     fn new(mgr: &NVFanManager, gpu: u32) -> Result<GPUData, String> {
 
         let coolers = mgr.ctrl.gpu_coolers(gpu)?;
@@ -443,6 +424,22 @@ impl GPUData {
             load: -1,
             mode: None
         })
+    }
+
+    fn update_from_mgr(&mut self, timespec: i64, mgr: &NVFanManager, gpu: u32) {
+        self.timespec = timespec;
+        self.temp = mgr.ctrl.get_temp(gpu).unwrap();
+        self.load = match mgr.ctrl.get_utilization(gpu).unwrap().get("graphics") {
+            Some(v) => *v,
+            None => -1
+        };
+        self.mode = mgr.ctrl.get_ctrl_status(gpu).ok();
+        let coolers_ref = mgr.ctrl.gpu_coolers(gpu).unwrap();
+        for i in 0..coolers_ref.len() {
+            self.rpm[i] = mgr.ctrl.get_fanspeed_rpm(gpu, coolers_ref[i]).unwrap();
+            self.speed[i] = mgr.ctrl.get_fanspeed(gpu, coolers_ref[i]).unwrap();
+        }
+
     }
 }
 
