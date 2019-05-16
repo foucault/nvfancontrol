@@ -2,6 +2,7 @@ use libc::{c_int, c_char, c_uchar, c_void, c_uint};
 use std::collections::HashMap;
 use std::{mem, ptr, slice};
 use std::ffi::CStr;
+use std::borrow::Cow;
 use ::{NVCtrlFanControlState, NvFanController};
 
 const XNV_OK: i32 = 1;
@@ -321,11 +322,11 @@ impl NvFanController for NvidiaControl {
         Ok(self._gpus.len() as u32)
     }
 
-    fn gpu_coolers(&self, gpu: u32) -> Result<&Vec<u32>, String> {
+    fn gpu_coolers(&self, gpu: u32) -> Result<Cow<Vec<u32>>, String> {
 
         self.check_gpu_id(gpu)?;
 
-        Ok(&self._gpus[gpu as usize].coolers)
+        Ok(Cow::Borrowed(&self._gpus[gpu as usize].coolers))
 
     }
 

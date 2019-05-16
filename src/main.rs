@@ -120,7 +120,7 @@ impl NVFanManager {
 
     fn set_fans(&self, speed: i32) -> Result<(), String> {
         self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Manual)?;
-        let coolers = self.ctrl.gpu_coolers(self.gpu)?;
+        let coolers = &*self.ctrl.gpu_coolers(self.gpu)?;
         for c in coolers {
             self.ctrl.set_fanspeed(self.gpu, *c, speed)?;
         }
@@ -136,7 +136,7 @@ impl NVFanManager {
 
         let temp = self.ctrl.get_temp(self.gpu)? as u16;
         let ctrl_status = self.ctrl.get_ctrl_status(self.gpu)?;
-        let coolers = self.ctrl.gpu_coolers(self.gpu)?;
+        let coolers = &*self.ctrl.gpu_coolers(self.gpu)?;
 
         if coolers.len() == 0 {
             return Err("No coolers available to adjust".to_string());
@@ -482,7 +482,7 @@ fn list_gpus_and_coolers() -> Result<(), String> {
     for gpu in 0..gpu_count {
         let name = ctrl.get_adapter(gpu)?;
         println!("GPU #{}: {} ", gpu, name);
-        let coolers = ctrl.gpu_coolers(gpu)?;
+        let coolers = &*ctrl.gpu_coolers(gpu)?;
         for c in coolers {
             println!(" COOLER-{}", c)
         }

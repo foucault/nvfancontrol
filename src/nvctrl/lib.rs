@@ -6,6 +6,7 @@ extern crate libc;
 #[cfg(target_os="windows")]
 extern crate libloading;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 #[cfg(any(target_os="linux", target_os="freebsd"))]
@@ -106,7 +107,7 @@ pub trait NvFanController {
     /// ** Arguments **
     ///
     /// * gpu: The GPU id
-    fn gpu_coolers(&self, gpu: u32) -> Result<&Vec<u32>, String>;
+    fn gpu_coolers(&self, gpu: u32) -> Result<Cow<Vec<u32>>, String>;
 }
 
 /// `NVCtrlFanControlState` represents the control state of a
