@@ -4,6 +4,7 @@ use libloading::{Library, Symbol};
 
 use std::ffi::CStr;
 use std::mem;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use libc;
@@ -12,8 +13,9 @@ use ::{NVCtrlFanControlState, NvFanController};
 const NVAPI_SHORT_STRING_MAX: usize = 64;
 const NVAPI_MAX_PHYSICAL_GPUS: usize = 64;
 const NVAPI_MAX_THERMAL_SENSORS_PER_GPU: usize = 3;
-const NVAPI_MAX_COOLERS_PER_GPU: usize = 20;
+const NVAPI_MAX_COOLERS_PER_GPU: usize = 3;
 const NVAPI_MAX_USAGES_PER_GPU: usize = 33;
+const NVAPI_COOLER_TARGET_ALL: usize = 7;
 
 #[cfg(target_arch="x86")] type QueryPtr = u32;
 #[cfg(target_arch="x86")] const NVAPI_DLL: &'static str = "nvapi.dll";
@@ -278,7 +280,7 @@ impl NvPhysicalGpuHandle {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code, non_camel_case_types)]
 enum NV_THERMAL_CONTROLLER {
     NONE = 0,
     GPU_INTERNAL = 1,
@@ -297,7 +299,7 @@ enum NV_THERMAL_CONTROLLER {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code, non_camel_case_types)]
 enum NV_THERMAL_TARGET {
     NONE          = 0,
     GPU           = 1,
@@ -371,7 +373,7 @@ impl NV_GPU_THERMAL_SETTINGS_V2 {
 /// A cooler policy enum
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
 #[allow(dead_code)]
 enum NV_COOLER_POLICY {
     /// When a cooler is not available the policy is always `NONE` (0)
@@ -564,7 +566,7 @@ impl NvidiaControl {
                     i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error: {}", i))
                 }
             },
-            i => Err(format!("NvAPI_Initialize() failed; error: {}", i))
+            i => Err(format!("NvAPI_Initialize() failed; error: {}; No driver?", i))
         }
     }
 
@@ -584,11 +586,11 @@ impl NvidiaControl {
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id to check
-    fn check_gpu_id(&self, id: u32) -> Result<(), String> {
-        if id > (self._gpu_count - 1) {
+    /// * `gpu` - The GPU id to check
+    fn check_gpu_id(&self, gpu: u32) -> Result<(), String> {
+        if gpu > (self._gpu_count - 1) {
             Err(format!("check_gpu_id() failed; id {} > {}",
-                        id, self._gpu_count - 1))
+                        gpu, self._gpu_count - 1))
         } else {
             Ok(())
         }
@@ -598,12 +600,12 @@ impl NvidiaControl {
 
 impl NvFanController for NvidiaControl {
 
-    fn get_temp(&self, id: u32) -> Result<i32, String> {
+    fn get_temp(&self, gpu: u32) -> Result<i32, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         let mut thermal = NV_GPU_THERMAL_SETTINGS_V2::new();
-        match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[id as usize],
+        match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[gpu as usize],
                                                     0, &mut thermal) }
         {
             0 => Ok(thermal.temp(0)),
@@ -612,22 +614,43 @@ impl NvFanController for NvidiaControl {
     }
 
     fn gpu_count(&self) -> Result<u32, String> {
-        Ok((self._gpu_count))
+        Ok(self._gpu_count)
     }
 
-    fn gpu_coolers(&self, id: u32) -> Result<Vec<u32>, String> {
-        Err(format!("gpu_coolers is unimplemented", i))
-    }
+    fn gpu_coolers(&self, gpu: u32) -> Result<Cow<Vec<u32>>, String> {
 
-    fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {
-
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[id as usize], 0,
+        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize],
+                                                   NVAPI_COOLER_TARGET_ALL as _,
                                                    &mut cooler_settings) }
         {
             0 => {
+                Ok(Cow::Owned(
+                    (0..(cooler_settings.count as u32)).collect::<Vec<u32>>()))
+            },
+            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+        }
+    }
+
+    fn get_ctrl_status(&self, gpu: u32) -> Result<NVCtrlFanControlState, String> {
+
+        self.check_gpu_id(gpu)?;
+
+        let mut cooler_settings = NvGpuCoolerSettings::new();
+        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize],
+                                                   NVAPI_COOLER_TARGET_ALL as _,
+                                                   &mut cooler_settings) }
+        {
+            0 => {
+                // Technically each cooler can have different policy; however for our
+                // purpose all coolers should ideally have the same policy. So,
+                // unless the policy was not set by nvfancontrol (which should not
+                // be the case) coolers[0]...coolers[n] should follow the same policy.
+                // Hence return only the status of coolers[0].
+                // I'm wondering if it would make better sense to check all coolers and
+                // return an error if policies differ.
                 match cooler_settings.coolers[0].current_policy {
                     NV_COOLER_POLICY::MANUAL => { Ok(NVCtrlFanControlState::Manual) },
                     NV_COOLER_POLICY::PERF          | NV_COOLER_POLICY::CONTINUOUS_SW |
@@ -645,66 +668,79 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn set_ctrl_type(&self, id: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
+    fn set_ctrl_type(&self, gpu: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
-        // Retain existing fanspeed
-        let fanspeed = self.get_fanspeed(id)?;
+        let coolers = &*self.gpu_coolers(gpu)?;
+        let mut levels = NvGpuCoolerLevels::new();
         let policy = mode_to_policy(typ);
 
-        let mut levels = NvGpuCoolerLevels::new();
-        levels.set_policy(0, policy);
-        levels.set_level(0, fanspeed);
-        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[id as usize],
-                                                 0, &levels) }
+        for c in coolers {
+            // Retain existing fanspeed for cooler c
+            let fanspeed = self.get_fanspeed(gpu, *c)?;
+
+            levels.set_policy(*c, policy);
+            levels.set_level(*c, fanspeed);
+        }
+
+        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[gpu as usize],
+                                                 NVAPI_COOLER_TARGET_ALL as _, &levels) }
         {
             0 => { Ok(()) },
-            i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
+            i => { return Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
         }
+
     }
 
-    fn get_fanspeed(&self, id: u32) -> Result<i32, String> {
+    fn get_fanspeed(&self, gpu: u32, id: u32) -> Result<i32, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[id as usize], 0,
+        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize], id,
                                                    &mut cooler_settings) }
         {
-            0 => Ok(cooler_settings.coolers[0].current_level),
+            0 => Ok(cooler_settings.coolers[id as usize].current_level),
             i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
         }
     }
 
-    fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String> {
+     // There is a bug here but it's not of nvfancontrol. If the GPU has more than
+     // one cooler it is impossible to get its RPM reading since there is no function
+     // for that in NVAPI; NvAPI_GPU_GetTachReading does not allow indexing on the
+     // coolers. Unfortunately this RPM reading is probably meaningless on GPUs with
+     // multiple coolers. It might be the RPM of the first coolers or who knows? There
+     // is no documentation anywhere on the public NVAPI. In any case the GPU coolers
+     // API is butchered anyway because reasons.
+    fn get_fanspeed_rpm(&self, gpu: u32, _id: u32) -> Result<i32, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         let mut speed = 0 as libc::c_uint;
-        match unsafe { NvAPI_GPU_GetTachReading(self.handles[id as usize], &mut speed) } {
+        match unsafe { NvAPI_GPU_GetTachReading(self.handles[gpu as usize], &mut speed) } {
             0 => Ok(speed as i32),
             i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i))
         }
     }
 
-    fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String> {
+    fn set_fanspeed(&self, gpu: u32, id: u32, speed: i32) -> Result<(), String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         let true_speed = self.true_speed(speed);
 
-        // Retain the existing policy
-        let policy = match self.get_ctrl_status(id) {
+        // Retain the existing (global) policy for cooler
+        let policy = match self.get_ctrl_status(gpu) {
             Ok(mode) => mode_to_policy(mode),
             Err(e) => { return Err(e); }
         };
 
         let mut levels = NvGpuCoolerLevels::new();
-        levels.set_policy(0, policy);
-        levels.set_level(0, true_speed as i32);
-        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[id as usize],
-                                                 0, &levels) }
+        levels.set_policy(id, policy);
+        levels.set_level(id, true_speed as i32);
+        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[gpu as usize],
+                                                 id, &levels) }
         {
             0 => { Ok(()) },
             i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
@@ -721,24 +757,23 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_adapter(&self, id: u32) -> Result<String, String> {
+    fn get_adapter(&self, gpu: u32) -> Result<String, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         let mut adapter = NvAPI_ShortString::new();
-        let index = id as usize;
-        match unsafe { NvAPI_GPU_GetFullName(self.handles[index], &mut adapter) } {
+        match unsafe { NvAPI_GPU_GetFullName(self.handles[gpu as usize], &mut adapter) } {
             0 => Ok(adapter.to_string()),
             i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i))
         }
     }
 
-    fn get_utilization(&self, id: u32) -> Result<HashMap<&str, i32>, String> {
+    fn get_utilization(&self, gpu: u32) -> Result<HashMap<&str, i32>, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         let mut gpu_usages = NvGpuUsages::new();
-        match unsafe { NvAPI_GPU_GetUsages(self.handles[id as usize],
+        match unsafe { NvAPI_GPU_GetUsages(self.handles[gpu as usize],
                                            &mut gpu_usages) }
         {
             0 => {
