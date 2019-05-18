@@ -1,8 +1,8 @@
-use libc::{c_int, c_char, c_void, c_uint};
+use libc::{c_int, c_char, c_uchar, c_void, c_uint};
 use std::collections::HashMap;
-use std::mem;
+use std::{mem, ptr, slice};
 use std::ffi::CStr;
-use std::ptr;
+use std::borrow::Cow;
 use ::{NVCtrlFanControlState, NvFanController};
 
 const XNV_OK: i32 = 1;
@@ -41,6 +41,34 @@ enum CTRL_ATTR {
     THERMAL_COOLER_LEVEL = 320,
     THERMAL_COOLER_SPEED = 405,
     THERMAL_COOLER_CURRENT_LEVEL = 417,
+}
+
+/// XNVCtrl Binary Attribute (non exchaustive)
+#[allow(dead_code)]
+#[allow(non_camel_case_types)]
+#[repr(u32)]
+enum BIN_ATTR {
+    EDID = 0,
+    MODELINES = 1,
+    METAMODES = 2,
+    XSCREENS_USING_GPU = 3,
+    GPUS_USED_BY_XSCREEN = 4,
+    GPUS_USING_FRAMELOCK = 5,
+    DISPLAY_VIEWPORT = 6,
+    FRAMELOCKS_USED_BY_GPU = 7,
+    GPUS_USING_VCSC = 8,
+    VCSCS_USED_BY_GPU = 9,
+    COOLERS_USED_BY_GPU = 10,
+    GPUS_USED_BY_LOGICAL_XSCREEN = 11,
+    THERMAL_SENSORS_USED_BY_GPU = 12,
+    GLASSES_PAIRED_TO_3D_VISION_PRO_TRANSCEIVERS = 13,
+    DISPLAY_TARGETS = 14,
+    DISPLAYS_CONNECTED_TO_GPU = 15,
+    METAMODES_VERSION_2 = 16,
+    DISPLAYS_ENABLED_ON_XSCREEN = 17,
+    DISPLAYS_ASSIGNED_TO_XSCREEN = 18,
+    GPU_FLAGS = 19,
+    DATA_DISPLAYS_ON_GPU = 20
 }
 
 /// All required foreign functions that are used in this library
@@ -138,6 +166,27 @@ extern {
     /// * `value` - The value of the attribute
     fn XNVCTRLQueryTargetCount(dpy: *const Display, target: CTRL_TARGET,
                                value: *mut c_int) -> c_int;
+
+    /// XNVCtrl get target binary data
+    ///
+    /// **Arguments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `target` - Attribute to count (`CTRL_TARGET`)
+    /// * `id` - GPU id
+    /// * `mask` - Attribute mask
+    /// * `attribute` - Attribute to get (`CTRL_ATTR`)
+    /// * `data` - The value of the attribute
+    /// * `len` - The length of the data
+    fn XNVCTRLQueryTargetBinaryData(dpy: *const Display, target: CTRL_TARGET,
+                                    id: c_int, mask: c_uint, attribute: BIN_ATTR,
+                                    data: *const *mut c_uchar, len: *mut c_int) -> c_int;
+}
+
+#[allow(dead_code)]
+struct UnixGPU {
+    id: u32,
+    coolers: Vec<u32>
 }
 
 /// NvidiaControl is the main struct that monitors and controls the
@@ -146,7 +195,7 @@ pub struct NvidiaControl {
     /// Current lower and upper limits
     pub limits: (u16, u16),
     dpy: *mut Display,
-    _gpu_count: u32
+    _gpus: Vec<UnixGPU>
 }
 
 impl NvidiaControl {
@@ -156,21 +205,62 @@ impl NvidiaControl {
     /// there is no need to call it directly.
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         let dpy = unsafe { XOpenDisplay(ptr::null()) };
+        let mut gpu_count = -1 as i32;
+        let mut gpus: Vec<UnixGPU>;
+
+
         if dpy.is_null() {
-            Err(format!("XNVCtrl failed: XOpenDisplay failed; is $DISPLAY set?"))
+            return Err(format!("XNVCtrl failed: XOpenDisplay failed; is $DISPLAY set?"));
         } else {
-            let mut gpus = -1 as i32;
             match unsafe {
-                XNVCTRLQueryTargetCount(dpy, CTRL_TARGET::GPU, &mut gpus)
+                XNVCTRLQueryTargetCount(dpy, CTRL_TARGET::GPU, &mut gpu_count)
             } {
-                XNV_OK => {
-                    Ok(NvidiaControl{ limits: lim,
-                                      dpy: dpy,
-                                      _gpu_count: gpus as u32})
-                },
-                i => Err(format!("XNVCtrl QueryCount(GPU) failed; error {}", i))
+                XNV_OK => {}
+                i => { return Err(format!("XNVCtrl QueryCount(GPU) failed; error {}", i)); }
+            }
+
+            gpus = Vec::with_capacity(gpu_count as usize);
+
+            for i in 0..gpu_count {
+                let mut len = -1 as i32;
+                let v: *mut c_uchar = unsafe { mem::uninitialized() };
+
+                match unsafe {
+                    XNVCTRLQueryTargetBinaryData(dpy, CTRL_TARGET::GPU, i, 0,
+                                                 BIN_ATTR::COOLERS_USED_BY_GPU, &v , &mut len)
+                } {
+                    XNV_OK => {
+                        // NVCtrl stores the number of coolers in the first int of the response
+                        // array rather than the `len` variable; I know, it's unintuitive. So we
+                        // need to actually read the first int from the `raw` array to find out how
+                        // many coolers the GPU has. The `raw` array always has a length of
+                        // NUM_OF_GPU_COOLERS + 1 and it is populated with the indices of said
+                        // coolers. Black pointer magic.
+                        let raw = unsafe { mem::transmute::<*mut c_uchar, *mut c_int>(v) };
+                        let num_coolers = unsafe { ptr::read(raw) } as usize;
+                        let mut coolers: Vec<u32> = Vec::with_capacity(num_coolers);
+                        let array: &[c_int] = unsafe {
+                            slice::from_raw_parts(raw, 1usize+num_coolers)
+                        };
+
+                        for cooler in 0..(num_coolers) {
+                            coolers.push(array[cooler+1] as u32);
+                        }
+
+                        gpus.push(UnixGPU { id: i as u32, coolers: coolers });
+
+                    }
+                    i => {
+                        return Err(format!("XNVCtrl BinaryData(COOLERS_USED_BY_GPU failed; {}", i));
+                    }
+                }
+
             }
         }
+
+        Ok(NvidiaControl{ limits: lim,
+                          dpy: dpy,
+                          _gpus: gpus })
     }
 }
 
@@ -188,27 +278,27 @@ impl NvidiaControl {
     ///
     /// **Arguments**
     ///
-    /// * `id` - The GPU id to check
-    fn check_gpu_id(&self, id: u32) -> Result<(), String> {
-        if id > (self._gpu_count - 1) {
+    /// * `gpu` - The GPU id to check
+    fn check_gpu_id(&self, gpu: u32) -> Result<(), String> {
+        if gpu as usize > (self._gpus.len() - 1) {
             Err(format!("check_gpu_id() failed; id {} > {}",
-                        id, self._gpu_count - 1))
+                        gpu, self._gpus.len() - 1))
         } else {
             Ok(())
         }
     }
 
-    /*pub fn cooler_count(&self) -> Result<u32, String> {
+    fn check_fan_id(&self, id: u32) -> Result<(), String> {
 
-        let mut coolers = -1 as i32;
-        match unsafe {
-            XNVCTRLQueryTargetCount(self.dpy, CTRL_TARGET::COOLER, &mut coolers)
-        } {
-            XNV_OK => Ok(coolers as u32),
-            i => Err(format!("XNVCtrl QueryCount(COOLER) failed; error {}", i))
+        for gpu in &self._gpus {
+            match gpu.coolers.iter().find(|x| x == &&id ) {
+                Some(_) => { return Ok(()); },
+                None => {}
+            }
         }
 
-    }*/
+        Err(format!("check_fan_id() failed; Cooler {} not found", id))
+    }
 
 }
 
@@ -229,16 +319,24 @@ impl NvFanController for NvidiaControl {
     }
 
     fn gpu_count(&self) -> Result<u32, String> {
-        Ok(self._gpu_count)
+        Ok(self._gpus.len() as u32)
     }
 
-    fn get_ctrl_status(&self, id: u32) -> Result<NVCtrlFanControlState, String> {
+    fn gpu_coolers(&self, gpu: u32) -> Result<Cow<Vec<u32>>, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
+
+        Ok(Cow::Borrowed(&self._gpus[gpu as usize].coolers))
+
+    }
+
+    fn get_ctrl_status(&self, gpu: u32) -> Result<NVCtrlFanControlState, String> {
+
+        self.check_gpu_id(gpu)?;
 
         let mut tmp = -1 as i32;
         match unsafe {
-            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::GPU, id as i32, 0,
+            XNVCTRLQueryTargetAttribute(self.dpy, CTRL_TARGET::GPU, gpu as i32, 0,
                                         CTRL_ATTR::COOLER_MANUAL_CONTROL, &mut tmp)
         } {
             XNV_OK => {
@@ -252,12 +350,12 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn set_ctrl_type(&self, id: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
+    fn set_ctrl_type(&self, gpu: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
 
-        self.check_gpu_id(id)?;
+        self.check_gpu_id(gpu)?;
 
         match unsafe {
-            XNVCTRLSetTargetAttributeAndGetStatus(self.dpy, CTRL_TARGET::GPU, id as i32, 0,
+            XNVCTRLSetTargetAttributeAndGetStatus(self.dpy, CTRL_TARGET::GPU, gpu as i32, 0,
                                                   CTRL_ATTR::COOLER_MANUAL_CONTROL,
                                                   typ as c_int)
         } {
@@ -266,9 +364,9 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_fanspeed(&self, id: u32) -> Result<i32, String> {
+    fn get_fanspeed(&self, _: u32, id: u32) -> Result<i32, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_fan_id(id)?;
 
         let mut tmp = -1 as i32;
         match unsafe {
@@ -279,9 +377,9 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_fanspeed_rpm(&self, id: u32) -> Result<i32, String> {
+    fn get_fanspeed_rpm(&self, _: u32, id: u32) -> Result<i32, String> {
 
-        self.check_gpu_id(id)?;
+        self.check_fan_id(id)?;
 
         let mut tmp = -1 as i32;
         match unsafe {
@@ -292,9 +390,9 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn set_fanspeed(&self, id: u32, speed: i32) -> Result<(), String> {
+    fn set_fanspeed(&self, _: u32, id: u32, speed: i32) -> Result<(), String> {
 
-        self.check_gpu_id(id)?;
+        self.check_fan_id(id)?;
 
         let true_speed = self.true_speed(speed);
         match unsafe {
