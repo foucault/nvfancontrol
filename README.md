@@ -14,8 +14,9 @@ certain level of GPU utilization. This is a small toy project in Rust to
 achieve a more elaborate control over this using either XNVCtrl in Linux or
 NVAPI in Windows. It is a work in progress so proceed with caution!
 
-The minimum supported driver version is **352.09**. The program currently
-supports single GPU configurations.
+The minimum supported driver version is **352.09**. For GPUs with **multiple
+independent cooler control** nvfancontrol will autodetect and apply the provided
+response curve to each of the available fans separately.
 
 HowTo
 -----
@@ -29,7 +30,7 @@ build the project from source read along.
 
 You will need:
 
-* the Rust compiler toolchain, stable >=1.15 or nightly (build)
+* the Rust compiler toolchain, stable >=1.34 or nightly (build)
 * XNVCtrl; static (build only) or dynamic (build and runtime)
 * Xlib (build and runtime)
 * Xext (build and runtime)
@@ -115,6 +116,13 @@ a certain temperature threshold. If you want to always use the custom curve
 pass the additional `-f` or `--force` argument. To terminate nvfancontrol send
 a SIGINT or SIGTERM on Linux or hit Ctrl-C in the console window on Windows.
 
+Although presently nvfancontrol is limited to a single GPU, users can select
+the card to modulate the fan operation using the `-g` or `--gpu` switch. GPUs
+are indexed from `0`. To help with that option `-p` or `--print-coolers` will
+list all available GPUs with their respective coolers.  On Windows coolers are
+indexed from `0` for each GPU. On Linux each available cooler on the system is
+assigned a unique id.
+
 ### Third party interfacing
 
 nvfancontrol offers two ways to dump the output of the program for integration
@@ -127,12 +135,23 @@ be followed by a port number (default port is 12125). The server prints the
 JSON data through the socket and immediately closes the connection. The message
 is always terminated with a new-line character.
 
-Bugs
-----
+Bugs and known issues
+---------------------
 Although nvfancontrol should work with most Fermi or newer NVidia cards it has
 been tested with only a handful of GPUs. So it is quite possible that bugs or
 unexpected behaviour might surface. In that case please open an issue in the
 bug tracker including the complete program output (use the `--debug` option).
+
+RPM reporting for GPUs with multiple fans on Windows is incorrect or totally
+wrong because the provided function `NvAPI_GPU_GetTachReading` is limited to a
+single fan. There is nothing in the public NVAPI to suggest otherwise.
+However, speed in % should work as expected. In any case multiple cooler
+support on Windows is not thoroughly tested so bug reports are always welcome!
+
+As mentioned before, nvfancontrol is limited to a single (but selectable) GPU.
+The underlying code does support multiple GPUs but exposing this support to the
+user-facing program will require possibly breaking alterations to the
+configuration file. It will be added eventually.
 
 License
 -------
