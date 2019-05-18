@@ -61,83 +61,11 @@ lazy_static! {
         unsafe { NVAPI.get(b"nvapi_QueryInterface").unwrap() };
 }
 
-/*
- * Duplication here is necessary until #37406 [0] is resolved and
- * feature(link_cfg) makes it into stable
- * [0]: https://github.com/rust-lang/rust/issues/37406
- */
 /// All these functions return a status code upon call. There are wrappers for all these function
 /// through the `NvFanController` trait and are part of the documented NVAPI spec.
 #[allow(dead_code)]
-#[cfg(target_arch="x86_64")]
-#[link(name="nvapi64", kind="static")]
-extern {
-    /// Initialises NvAPI.
-    fn NvAPI_Initialize() -> libc::c_int;
-
-    /// Unloads nvapi{64}.dll from memory.
-    fn NvAPI_Unload() -> libc::c_int;
-
-    /// Returns the version of the NVAPI library
-    ///
-    /// ***Arguments***
-    ///
-    /// * `ver` - An `NvAPI_ShortString` that will be populated upon function call with the NVAPI
-    /// version string
-    fn NvAPI_GetInterfaceVersionString(ver: *mut NvAPI_ShortString) -> libc::c_int;
-
-    /// Lists all available physical GPUS into the specified array.
-    ///
-    /// **Arguments**
-    ///
-    /// * `handles` - An array of unitialized `NvPhysicalGpuHandle`s. The size of this function is
-    /// specified by the static variable `NVAPI_MAX_PHYSICAL_GPUS`. The array will be populated
-    /// upon function call.
-    ///
-    /// * `count` - The number of available physical GPUs. These variable will be populated upon
-    /// function call.
-    fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
-
-    /// Get the name of the specified GPU
-    ///
-    /// **Arguments**
-    ///
-    /// * `handle` - The GPU for which the name is requested
-    /// * `name` - A pointer to an `NvAPI_ShortString` that will be populated with the adapter name
-    /// upon function call.
-    fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandle, name: *mut NvAPI_ShortString) -> libc::c_int;
-
-    /// Returns the fan speed in RPM
-    ///
-    /// **Arguments**
-    ///
-    /// * `handle` - The GPU for which the fan speed is requested
-    /// * `value` - The fan speed in RPM; it will be populated upon function call
-    fn NvAPI_GPU_GetTachReading(handle: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
-
-    /// Returns the thermal status of the specified GPU
-    ///
-    /// **Arguments**
-    ///
-    /// * `handle` - The GPU for which the thermal settings are requested.
-    /// * `index` - The sensor index
-    /// * `settings` - The thermal settings struct; it will be populated upon function call
-    fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
-
-    /// Returns the NVidia driver version
-    ///
-    /// **Arguments**
-    ///
-    /// * `driverVersion` - The driver version number; it will be populated upon function call
-    /// * `branch` - The driver version branch; it will be populated upon function call
-    fn NvAPI_SYS_GetDriverAndBranchVersion(driverVersion: *mut u32, branch: *mut NvAPI_ShortString) -> libc::c_int;
-}
-
-/// All these functions return a status code upon call. There are wrappers for all these function
-/// through the `NvFanController` trait and are part of the documented NVAPI spec.
-#[allow(dead_code)]
-#[cfg(target_arch="x86")]
-#[link(name="nvapi", kind="static")]
+#[cfg_attr(target_arch="x86", link(name="nvapi", kind="static"))]
+#[cfg_attr(target_arch="x86_64", link(name="nvapi64", kind="static"))]
 extern {
     /// Initialises NvAPI.
     fn NvAPI_Initialize() -> libc::c_int;
