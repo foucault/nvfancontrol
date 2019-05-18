@@ -487,7 +487,7 @@ impl NvGpuCoolerSettings {
     /// Creates a new `NvGpuCoolerSettings` with sane defaults
     fn new() -> NvGpuCoolerSettings {
         NvGpuCoolerSettings {
-            version: NVAPI_VERSION::<NvGpuCoolerSettings>(2u32),
+            version: NVAPI_VERSION::<NvGpuCoolerSettings>(1u32),
             count: 0,
             coolers: [NvCooler {
                 cooler_type: -1,
