@@ -4,7 +4,7 @@ version = "0.3.99"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 
 [dependencies]
-log = "*"
+log = "0.4"
 getopts = "*"
 time = "*"
 serde = "*"
