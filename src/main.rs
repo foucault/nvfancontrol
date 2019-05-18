@@ -25,7 +25,7 @@ use std::thread;
 use std::process;
 use std::time::Duration;
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool, Ordering, ATOMIC_BOOL_INIT};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::io::Write;
 use std::path::PathBuf;
 use std::net::{TcpListener, TcpStream, Shutdown};
@@ -36,8 +36,8 @@ const DEFAULT_PORT: u32 = 12125;
 const DEFAULT_CURVE: [(u16, u16); 7] = [(41, 20), (49, 30), (57, 45), (66, 55),
                                         (75, 63), (78, 72), (80, 80)];
 
-static RUNNING: AtomicBool = ATOMIC_BOOL_INIT;
-static SRVING: AtomicBool = ATOMIC_BOOL_INIT;
+static RUNNING: AtomicBool = AtomicBool::new(false);
+static SRVING: AtomicBool = AtomicBool::new(false);
 static LOGGER: Logger = Logger;
 
 struct Logger;
