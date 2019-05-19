@@ -1,17 +1,17 @@
 [package]
 name = "nvctrl"
-version = "0.3.99"
+version = "0.4.0"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 build = "build.rs"
 
 [dependencies]
-libc = "*"
-serde = "*"
-serde_derive = "*"
+libc = "0.2.47"
+serde = "1.0"
+serde_derive = "1.0"
 
 [target.'cfg(windows)'.dependencies]
-libloading = "*"
-lazy_static = "*"
+libloading = "0.5"
+lazy_static = "1.2"
 
 [lib]
 name = "nvctrl"
