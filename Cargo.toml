@@ -7,9 +7,10 @@ authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 log = "0.4"
 getopts = "*"
 time = "*"
-serde = "*"
-serde_json = "*"
-serde_derive = "*"
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+toml = "0.5"
 dirs = "*"
 
 [target.'cfg(unix)'.dependencies]

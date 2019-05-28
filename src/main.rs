@@ -1,8 +1,7 @@
 extern crate nvctrl;
 use nvctrl::{NvFanController, NvidiaControl, NVCtrlFanControlState};
 
-#[macro_use]
-extern crate log;
+#[macro_use] extern crate log;
 use log::{Log, Record, LevelFilter, Metadata};
 
 extern crate getopts;
@@ -16,10 +15,7 @@ extern crate time;
 extern crate dirs;
 
 #[macro_use] extern crate serde_derive;
-extern crate serde_json;
 
-use std::io::{BufReader, BufRead};
-use std::fs::File;
 use std::env;
 use std::thread;
 use std::process;
@@ -30,11 +26,18 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::net::{TcpListener, TcpStream, Shutdown};
 
+pub mod config;
+use self::config::{Curve};
+
 const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
 const DEFAULT_PORT: u32 = 12125;
-const DEFAULT_CURVE: [(u16, u16); 7] = [(41, 20), (49, 30), (57, 45), (66, 55),
-                                        (75, 63), (78, 72), (80, 80)];
+const DEFAULT_CONFIG: &'static str = r"
+[[gpus]]
+id = {}
+enabled = true
+points = [[41, 20], [49, 30], [57, 45], [66, 55], [75, 63], [78, 72], [80, 80]]
+";
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static SRVING: AtomicBool = AtomicBool::new(false);
@@ -305,62 +308,6 @@ fn find_config_file() -> Option<PathBuf> {
     }
 }
 
-fn curve_from_conf(path: PathBuf) -> Result<Vec<(u16,u16)>, String> {
-
-    let mut curve: Vec<(u16, u16)>;
-
-    match File::open(path.to_str().unwrap()) {
-        Ok(file) => {
-            curve = Vec::new();
-
-            for raw_line in BufReader::new(file).lines() {
-                let line = raw_line.unwrap();
-                let trimmed = line.trim();
-                if trimmed.starts_with('#') {
-                    continue;
-                }
-
-                let parts = trimmed.split_whitespace()
-                                   .collect::<Vec<&str>>();
-
-                if parts.len() < 2 {
-                    warn!("Invalid line \"{}\", ignoring", line);
-                    continue
-                }
-
-                let x = match parts[0].parse::<u16>() {
-                    Ok(val) => val,
-                    Err(e) => {
-                        warn!("Could not parse value {}: {}, ignoring",
-                               parts[0], e);
-                        continue;
-                    }
-                };
-
-                let y = match parts[1].parse::<u16>() {
-                    Ok(val) => val,
-                    Err(e) => {
-                        warn!("Could not parse value {}: {}, ignoring",
-                               parts[1], e);
-                        continue;
-                    }
-                };
-
-                curve.push((x, y));
-            }
-            if curve.len() < 2 {
-                Err(String::from("At least two points are required for \
-                                 the curve"))
-            } else {
-                Ok(curve)
-            }
-        },
-        Err(e) => Err(format!("Could not read configuration file {:?}: {}",
-                      path, e))
-    }
-
-}
-
 fn make_options() -> Options {
     let mut opts = Options::new();
 
@@ -489,6 +436,14 @@ fn list_gpus_and_coolers() -> Result<(), String> {
 
 }
 
+fn make_default_curve(gpu: u32) -> Vec<(u16, u16)> {
+    let conf = DEFAULT_CONFIG.replace("{}", &gpu.to_string());
+    let c = config::from_string(&conf).unwrap();
+    debug!("Default configuration loaded");
+    debug!("{}", conf.trim());
+    c.points(gpu as usize).to_vec()
+}
+
 fn validate_gpu_id(gpu: u32) -> Result<(), String> {
     let ctrl = NvidiaControl::new(None)?;
     let count = ctrl.gpu_count()?;
@@ -588,17 +543,18 @@ pub fn main() {
 
     let curve: Vec<(u16, u16)> = match find_config_file() {
         Some(path) => {
-            match curve_from_conf(path) {
-                Ok(c) => c,
+            info!("Loading configuration file: {:?}", path);
+            match config::from_file(path) {
+                Ok(c) => c.points(gpu as usize).to_vec(),
                 Err(e) => {
                     warn!("{}; using default curve", e);
-                    DEFAULT_CURVE.to_vec()
+                    make_default_curve(gpu)
                 }
             }
         },
         None => {
             warn!("No config file found; using default curve");
-            DEFAULT_CURVE.to_vec()
+            make_default_curve(gpu)
         }
     };
 

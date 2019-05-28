@@ -6,8 +6,8 @@ build = "build.rs"
 
 [dependencies]
 libc = "*"
-serde = "*"
-serde_derive = "*"
+serde = "1.0"
+serde_derive = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 libloading = "*"
