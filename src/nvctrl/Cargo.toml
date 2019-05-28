@@ -1,6 +1,6 @@
 [package]
 name = "nvctrl"
-version = "0.3.99"
+version = "0.4.99"
 authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 build = "build.rs"
 
