@@ -489,6 +489,17 @@ fn list_gpus_and_coolers() -> Result<(), String> {
 
 }
 
+fn validate_gpu_id(gpu: u32) -> Result<(), String> {
+    let ctrl = NvidiaControl::new(None)?;
+    let count = ctrl.gpu_count()?;
+
+    if gpu > (count - 1) {
+        Err(format!("Invalid GPU id: {}; max: {}", gpu, count-1))
+    } else {
+        Ok(())
+    }
+}
+
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -548,7 +559,13 @@ pub fn main() {
         gpu = match matches.opt_str("g") {
             Some(g) => {
                 match g.parse::<u32>() {
-                    Ok(v) => v,
+                    Ok(v) => {
+                        validate_gpu_id(v).unwrap_or_else(|e| {
+                            error!("{}", e);
+                            process::exit(1);
+                        });
+                        v
+                    },
                     Err(e) => {
                         error!("Option \"-g\" present but non-valid: \"{}\": {}", e, g);
                         process::exit(1);
