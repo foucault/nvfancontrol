@@ -11,6 +11,7 @@ use getopts::Options;
 #[cfg(windows)] extern crate ctrlc;
 #[cfg(unix)] extern crate nix;
 #[cfg(unix)] use nix::sys::signal;
+#[cfg(unix)] use std::ffi::OsString;
 
 extern crate time;
 extern crate dirs;
@@ -290,19 +291,59 @@ fn make_limits(res: String) -> Result<Option<(u16,u16)>, String> {
     }
 }
 
+#[cfg(unix)]
+fn find_global_config_dirs() -> Vec<PathBuf> {
+
+    // This is essentially the same as in xdg-rs
+    fn paths(paths: OsString) -> Option<Vec<PathBuf>> {
+        let p = env::split_paths(&paths)
+                    .map(PathBuf::from)
+                    .filter(|ref path| path.is_absolute())
+                    .collect::<Vec<_>>();
+        if p.is_empty() {
+            None
+        } else {
+            Some(p)
+        }
+    }
+
+    env::var_os("XDG_CONFIG_DIRS")
+        .and_then(paths)
+        .unwrap_or(vec![PathBuf::from("/etc/xdg")])
+
+}
 
 fn find_config_file() -> Option<PathBuf> {
+
     match dirs::config_dir() {
         Some(path) => {
             let mut conf_path = PathBuf::from(path.to_str().unwrap());
             conf_path.push(CONF_FILE);
-            Some(conf_path)
+
+            // The "local" configuration file was found and supersedes all
+            // others. We are done.
+            if conf_path.as_path().exists() {
+                return Some(conf_path);
+            }
         },
-        None => {
-            warn!("Could not find config directory; no config file available");
-            None
+        _ => {}
+    };
+
+    // If no "local" configuration file was found check the global ones
+    // unix-only
+    #[cfg(unix)] {
+        let config_dirs = find_global_config_dirs();
+
+        for dir in config_dirs {
+            let mut conf_path = PathBuf::from(dir.to_str().unwrap());
+            conf_path.push(CONF_FILE);
+            if conf_path.as_path().exists() {
+                return Some(conf_path);
+            }
         }
     }
+
+    None
 }
 
 fn curve_from_conf(path: PathBuf) -> Result<Vec<(u16,u16)>, String> {
