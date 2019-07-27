@@ -91,7 +91,7 @@ extern {
     ///
     /// * `count` - The number of available physical GPUs. These variable will be populated upon
     /// function call.
-    fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
+    fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
 
     /// Get the name of the specified GPU
     ///
@@ -100,7 +100,7 @@ extern {
     /// * `handle` - The GPU for which the name is requested
     /// * `name` - A pointer to an `NvAPI_ShortString` that will be populated with the adapter name
     /// upon function call.
-    fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandle, name: *mut NvAPI_ShortString) -> libc::c_int;
+    fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandlePtr, name: *mut NvAPI_ShortString) -> libc::c_int;
 
     /// Returns the fan speed in RPM
     ///
@@ -108,7 +108,7 @@ extern {
     ///
     /// * `handle` - The GPU for which the fan speed is requested
     /// * `value` - The fan speed in RPM; it will be populated upon function call
-    fn NvAPI_GPU_GetTachReading(handle: NvPhysicalGpuHandle, value: *mut u32) -> libc::c_int;
+    fn NvAPI_GPU_GetTachReading(handle: NvPhysicalGpuHandlePtr, value: *mut u32) -> libc::c_int;
 
     /// Returns the thermal status of the specified GPU
     ///
@@ -117,7 +117,7 @@ extern {
     /// * `handle` - The GPU for which the thermal settings are requested.
     /// * `index` - The sensor index
     /// * `settings` - The thermal settings struct; it will be populated upon function call
-    fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
+    fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandlePtr, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
 
     /// Returns the NVidia driver version
     ///
@@ -136,9 +136,9 @@ extern {
 /// * `index` - The cooler index
 /// * `levels` - The cooler levels for the specified GPU
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandle, index: u32, levels: *const NvGpuCoolerLevels) -> libc::c_int {
+unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandlePtr, index: u32, levels: *const NvGpuCoolerLevels) -> libc::c_int {
     let func = mem::transmute::<
-        *const (), fn(NvPhysicalGpuHandle, u32, *const NvGpuCoolerLevels) -> libc::c_int
+        *const (), fn(NvPhysicalGpuHandlePtr, u32, *const NvGpuCoolerLevels) -> libc::c_int
     >(NvAPI_QueryInterface(QueryCode::SetCoolerLevels as QueryPtr));
     func(handle, index, levels)
 }
@@ -153,9 +153,9 @@ unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandle, index: u32, lev
 /// * `settings` - The `NvGpuCoolerSettings` containing the requested information; it will be
 /// populated upon function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandle, index: u32, settings: *mut NvGpuCoolerSettings) -> libc::c_int {
+unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandlePtr, index: u32, settings: *mut NvGpuCoolerSettings) -> libc::c_int {
     let func = mem::transmute::<
-        *const (), fn(NvPhysicalGpuHandle, u32, *mut NvGpuCoolerSettings) -> libc::c_int
+        *const (), fn(NvPhysicalGpuHandlePtr, u32, *mut NvGpuCoolerSettings) -> libc::c_int
     >(NvAPI_QueryInterface(QueryCode::GetCoolerSettings as QueryPtr));
     func(handle, index, settings)
 }
@@ -168,9 +168,9 @@ unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandle, index: u32, s
 /// * `usages` - The `NvGpuUsages` containing the requested information; it will be populated upon
 /// function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandle, usages: *mut NvGpuUsages) -> libc::c_int {
+unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandlePtr, usages: *mut NvGpuUsages) -> libc::c_int {
     let func = mem::transmute::<
-        *const (), fn(NvPhysicalGpuHandle, *mut NvGpuUsages) -> libc::c_int
+        *const (), fn(NvPhysicalGpuHandlePtr, *mut NvGpuUsages) -> libc::c_int
     >(NvAPI_QueryInterface(QueryCode::GetUsages as QueryPtr));
     func(handle, usages)
 }
@@ -196,15 +196,9 @@ impl NvAPI_ShortString {
 
 /// A GPU handle.
 #[repr(C)]
-#[derive(Copy, Clone)]
-struct NvPhysicalGpuHandle { unused: i32 }
-
-impl NvPhysicalGpuHandle {
-    /// Returns a new empty GPU handle.
-    fn new() -> NvPhysicalGpuHandle {
-        NvPhysicalGpuHandle { unused: 0 }
-    }
-}
+#[derive(Copy, Clone, Debug)]
+struct NvPhysicalGpuHandle { unused: libc::c_int }
+type NvPhysicalGpuHandlePtr = *mut NvPhysicalGpuHandle;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -473,7 +467,7 @@ pub struct NvidiaControl {
     /// Current lower and upper limits
     pub limits: (u16, u16),
     /// All GPU handles
-    handles: [NvPhysicalGpuHandle; NVAPI_MAX_PHYSICAL_GPUS],
+    handles: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS],
     /// Number of available GPUs in the system
     _gpu_count: u32
 }
@@ -486,7 +480,7 @@ impl NvidiaControl {
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
             0 => {
-                let mut handle = [NvPhysicalGpuHandle::new(); NVAPI_MAX_PHYSICAL_GPUS];
+                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::uninitialized() };
                 let mut count = 0 as u32;
                 match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
                     0 => Ok(NvidiaControl{ limits: lim,
@@ -555,8 +549,9 @@ impl NvFanController for NvidiaControl {
                                                    &mut cooler_settings) }
         {
             0 => {
+                let count = cooler_settings.count as u32;
                 Ok(Cow::Owned(
-                    (0..(cooler_settings.count as u32)).collect::<Vec<u32>>()))
+                    (0..count).collect::<Vec<u32>>()))
             },
             i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
         }
