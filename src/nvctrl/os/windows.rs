@@ -394,6 +394,12 @@ struct NvCooler {
     active: i32,
 }
 
+impl NvCooler {
+    unsafe fn zeroed() -> Self {
+        mem::zeroed()
+    }
+}
+
 /// Cooler settings
 #[repr(C)]
 struct NvGpuCoolerSettings {
@@ -411,20 +417,7 @@ impl NvGpuCoolerSettings {
         NvGpuCoolerSettings {
             version: NVAPI_VERSION::<NvGpuCoolerSettings>(1u32),
             count: 0,
-            coolers: [NvCooler {
-                cooler_type: -1,
-                controller: -1,
-                default_min: -1,
-                default_max: -1,
-                current_min: -1,
-                current_max: -1,
-                current_level: -1,
-                default_policy: NV_COOLER_POLICY::NONE,
-                current_policy: NV_COOLER_POLICY::NONE,
-                target: -1,
-                control_type: -1,
-                active: -1
-            }; NVAPI_MAX_COOLERS_PER_GPU]
+            coolers: [unsafe { NvCooler::zeroed() }; NVAPI_MAX_COOLERS_PER_GPU]
         }
     }
 }
