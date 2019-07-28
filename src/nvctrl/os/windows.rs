@@ -33,7 +33,11 @@ enum QueryCode {
     Unload = 0x0D22BDD7E,
     SetCoolerLevels = 0x891FA0AE,
     GetCoolerSettings = 0xDA141340,
-    GetUsages = 0x189A1FDF
+    GetUsages = 0x189A1FDF,
+    ClientFanCoolersGetInfo = 0xFB85B01E,
+    ClientFanCoolersGetStatus = 0x35AED5E8,
+    ClientFanCoolersGetControl = 0x814B209F,
+    ClientFanCoolersSetControl = 0xA58971A5
 }
 
 /// Generates a NvAPI compatible version for a specified struct type
