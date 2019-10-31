@@ -356,7 +356,7 @@ fn make_options() -> Options {
     opts.optopt("l", "limits",
         "Comma separated lower and upper limits, use 0 to disable,
         default: 20,80", "LOWER,UPPER");
-    opts.optopt("g", "gpu", "GPU to adjust; must be > 0", "GPU");
+    opts.optopt("g", "gpu", "GPU to adjust; must be >= 0", "GPU");
     opts.optflag("p", "print-coolers", "Print available GPUs and coolers");
     opts.optflag("f", "force", "Always use the custom curve even if the fan is
                  already spinning in auto mode");

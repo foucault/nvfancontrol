@@ -20,7 +20,7 @@ pub use self::os::windows::*;
 pub mod os;
 
 /// All Fan Controller implementations should implement the
-/// NvFanController trait whcih provides basic functions to monitor
+/// NvFanController trait which provides basic functions to monitor
 /// and manipulate the GPU fan.
 pub trait NvFanController {
     /// Returns the temperature of the GPU in degrees Celsius
