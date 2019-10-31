@@ -68,10 +68,6 @@ impl FanspeedCurve {
                 let dx = p1.0 - p0.0;
                 let dy = p1.1 - p0.1;
 
-                if dx == 0 {
-                   unreachable!();
-                }
-
                 let slope = (dy as f32) / (dx as f32);
 
                 let speed_y = (p0.1 as f32) + (((temp_x - p0.0) as f32) * slope);
@@ -98,10 +94,6 @@ impl FanspeedCurve {
             if speed_y >= p0.1 && speed_y <= p1.1 {
                 let dx = p1.0 - p0.0;
                 let dy = p1.1 - p0.1;
-
-                if dy == 0 {
-                   unreachable!();
-                }
 
                 let slope = (dx as f32) / (dy as f32);
 

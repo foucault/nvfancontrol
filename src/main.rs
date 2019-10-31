@@ -30,6 +30,9 @@ use std::net::{TcpListener, TcpStream, Shutdown};
 pub mod config;
 use self::config::{Curve};
 
+pub mod fanflicker;
+use fanflicker::{FanFlickerFix, FanFlickerRange};
+
 pub mod fanspeedcurve;
 use fanspeedcurve::FanspeedCurve;
 
@@ -68,7 +71,8 @@ struct NVFanManager {
     ctrl: NvidiaControl,
     curve: FanspeedCurve,
     on_time: Option<f64>,
-    force: bool
+    force: bool,
+    fanflicker: Option<FanFlickerFix>,
 }
 
 impl Drop for NVFanManager {
@@ -82,8 +86,12 @@ impl Drop for NVFanManager {
 
 impl NVFanManager {
     fn new(
-            gpu: u32, curve: FanspeedCurve, force: bool, limits: Option<(u16, u16)>
-        ) -> Result<NVFanManager, String> {
+        gpu: u32,
+        curve: FanspeedCurve,
+        force: bool,
+        limits: Option<(u16, u16)>,
+        fanflickerrange: Option<FanFlickerRange>,
+    ) -> Result<NVFanManager, String> {
 
         let ctrl = NvidiaControl::new(limits)?;
         let gpu_count = ctrl.gpu_count()?;
@@ -108,10 +116,17 @@ impl NVFanManager {
 
         let ret = NVFanManager {
             gpu: gpu,
-            ctrl: ctrl,
             curve: curve,
             on_time: None,
-            force: force
+            force: force,
+            fanflicker: match fanflickerrange {
+                Some(range) => {
+                    let prev = (range.fickering_starts as i32).max(ctrl.get_fanspeed(0, gpu)?);
+                    Some(FanFlickerFix::new(range, prev))
+                },
+                None => None
+            },
+            ctrl: ctrl,
         };
 
         Ok(ret)
@@ -161,12 +176,12 @@ impl NVFanManager {
 
         let speed = self.curve.speed_y(temp);
 
-        match (speed, self.on_time) {
-            (Some(y), _) => {
+        match (speed, self.on_time, &mut self.fanflicker) {
+            (Some(y), _, None) => {
                 self.on_time = Some(time::precise_time_s());
                 self.set_fans(y)
             },
-            (None, Some(t)) => {
+            (None, Some(t), None) => {
                 let now = time::precise_time_s();
                 let diff = now - t;
 
@@ -182,11 +197,22 @@ impl NVFanManager {
                     self.reset_fan()
                 }
             },
-            (None, None) => {
+            (None, None, None) => {
                 // If no point is found then fan should be off
                 self.on_time = None;
                 self.reset_fan()
-
+            },
+            (Some(y), _, Some(fff)) => {
+                let y = fff.fix_speed(rpm, y);
+                self.set_fans(y)
+            },
+            (None, _, Some(fff)) => {
+                // The jump from 0 to some RPM (presumably in the flicker range) will
+                // cause flickering, which will then raise the RPM too much. So keep
+                // it at the lowest speed.
+                debug!("FanFlickerFix: preventing fan-off");
+                let new_speed = fff.fix_speed(rpm, fff.minimum());
+                self.set_fans(new_speed)
             },
         }
     }
@@ -334,6 +360,10 @@ fn make_options() -> Options {
                     over a tcp port. Can be optionally followed by the port
                     number over which the server will listen for incoming
                     connections", "PORT");
+    opts.optopt("r", "fanflicker", "Range in which fan flicker is prevented,
+                     specify as with \"-l\". Also makes fan spin with at
+                     least the specified lower limit which must not be zero.",
+                     "LOWER,UPPER");
     opts.optflag("h", "help", "Print this help message");
 
     opts
@@ -560,11 +590,16 @@ pub fn main() {
         }
     }
 
+    let mut fanflicker = None;
+
     let points: Vec<(u16, u16)> = match find_config_file() {
         Some(path) => {
             info!("Loading configuration file: {:?}", path);
             match config::from_file(path) {
-                Ok(c) => c.points(gpu as usize).to_vec(),
+                Ok(c) => {
+                    fanflicker = c.fanflicker(gpu as usize);
+                    c.points(gpu as usize).to_vec()
+                }
                 Err(e) => {
                     warn!("{}; using default curve", e);
                     make_default_curve(gpu)
@@ -587,7 +622,33 @@ pub fn main() {
         }
     };
 
-    let mut mgr = match NVFanManager::new(gpu, curve, force_update, limits) {
+    let fanflicker = matches.opt_process_or_default(
+        "r",
+        |arg: &str| {
+            match parse_ascending_arg_pair("r", arg) {
+                Ok(fanflicker) => fanflicker,
+                Err(e) => {
+                    error!("{}", e);
+                    process::exit(1);
+                }
+            }
+        },
+        // from the config file, overridden by the commandline if present
+        fanflicker
+    );
+
+    let fanflickerrange = match fanflicker {
+        Some(range) => match FanFlickerRange::new(range, &curve, &limits) {
+            Ok(range) => Some(range),
+            Err(e) => {
+                error!("{}", e);
+                process::exit(1);
+            },
+        }
+        None => None,
+    };
+
+    let mut mgr = match NVFanManager::new(gpu, curve, force_update, limits, fanflickerrange) {
         Ok(m) => m,
         Err(s) => {
             error!("{}", s);
