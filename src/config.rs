@@ -15,12 +15,17 @@ pub enum Config {
 
 #[derive(Debug, Deserialize)]
 pub struct GpuConfig<T> {
+    #[serde(rename = "gpu")]
     gpus: Vec<T>,
 }
 
+fn true_() -> bool { true }
+
 #[derive(Debug, Deserialize)]
 pub struct TomlConf {
+    #[serde(default)]
     id: u32,
+    #[serde(default = "true_")]
     enabled: bool,
     points: Vec<(u16, u16)>,
 }
@@ -49,10 +54,92 @@ impl Curve for Config {
 pub fn from_string(conf: &str) -> Result<Config, String> {
     match toml::from_str::<GpuConfig<TomlConf>>(conf) {
         Ok(c) => Ok(Config::Toml(c)),
-        Err(_) => {
+        Err(e) => {
             // Toml parsing failed; try legacy config instead
-            from_legacy_string(conf)
+            if might_be_legacy_string(conf) {
+                from_legacy_string(conf)
+            } else {
+                Err(format!("config parsing failed: {}", e))
+            }
         }
+    }
+}
+
+#[test]
+fn test_valid_toml_from_string() {
+    let cfg = from_string(&"[[gpu]]
+                            id = 0
+                            enabled = true
+                            points = [[1, 2], [3, 4], [5, 6]]
+
+                            [[gpu]]
+                            id = 1
+                            enabled = false
+                            points = [[6, 7], [8, 9]]");
+
+    assert!(cfg.is_ok());
+
+    let cfg = cfg.unwrap();
+
+    if let Config::Toml(cfg) = cfg {
+        assert!(cfg.gpus.len() == 2);
+        let g0 = &cfg.gpus[0];
+        assert_eq!(g0.id, 0);
+        assert_eq!(g0.enabled, true);
+        assert_eq!(g0.points, vec![(1, 2), (3, 4), (5, 6)]);
+
+        let g1 = &cfg.gpus[1];
+        assert_eq!(g1.id, 1);
+        assert_eq!(g1.enabled, false);
+        assert_eq!(g1.points, vec![(6, 7), (8, 9)]);
+    } else {
+        assert!(false, "Not a Config::Toml(..) enum value");
+    }
+}
+
+#[test]
+fn test_defaults_with_toml_from_string() {
+    let cfg = from_string(&"[[gpu]]\npoints = [[11, 22], [33, 44]]");
+
+    assert!(cfg.is_ok());
+
+    let cfg = cfg.unwrap();
+
+    if let Config::Toml(cfg) = cfg {
+        assert!(cfg.gpus.len() == 1);
+        let g0 = &cfg.gpus[0];
+        assert_eq!(g0.id, 0);
+        assert_eq!(g0.enabled, true);
+        assert_eq!(g0.points, vec![(11, 22), (33, 44)]);
+    } else {
+        assert!(false, "Not a Config::Toml(..) enum value");
+    }
+}
+
+
+#[test]
+fn test_invalid_toml_from_string() {
+    let cfg = from_string(&"[[gpu]]\npoints = [[2, foobar]]");
+
+    assert!(cfg.is_err());
+
+    if let Err(msg) = cfg {
+        assert!(msg.find("invalid number").is_some());
+    } else {
+        assert!(false, "parsing should have failed");
+    }
+}
+
+#[test]
+fn test_invalid_legacy_from_string() {
+    let cfg = from_string(&"2 3 ]]");
+
+    assert!(cfg.is_err());
+
+    if let Err(msg) = cfg {
+        assert!(msg == "At least two points are required for the curve");
+    } else {
+        assert!(false, "parsing should have failed");
     }
 }
 
@@ -65,6 +152,19 @@ pub fn from_file(path: PathBuf) -> Result<Config, String> {
         }
         Err(e) => Err(format!("Could not open file: {}", e)),
     }
+}
+
+fn might_be_legacy_string(conf: &str) -> bool {
+    for line in conf.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.find("[gpu]").is_some() || trimmed.starts_with("points") {
+            return false;
+        }
+    }
+    true
 }
 
 fn from_legacy_string(conf: &str) -> Result<Config, String> {
@@ -105,10 +205,7 @@ fn from_legacy_string(conf: &str) -> Result<Config, String> {
         curve.push((x, y));
     }
     if curve.len() < 2 {
-        Err(String::from(
-            "At least two points are required for \
-             the curve",
-        ))
+        Err("At least two points are required for the curve".to_string())
     } else {
         Ok(Config::Legacy(GpuConfig {
             gpus: vec![LegacyConf { points: curve }],

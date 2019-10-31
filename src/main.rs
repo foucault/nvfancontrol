@@ -34,7 +34,7 @@ const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
 const DEFAULT_PORT: u32 = 12125;
 const DEFAULT_CONFIG: &'static str = r"
-[[gpus]]
+[[gpu]]
 id = {}
 enabled = true
 points = [[41, 20], [49, 30], [57, 45], [66, 55], [75, 63], [78, 72], [80, 80]]
