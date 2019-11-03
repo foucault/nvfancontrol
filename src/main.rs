@@ -257,7 +257,7 @@ fn register_signal_handlers() -> Result<(), String> {
     }
 }
 
-fn make_limits(res: String) -> Result<Option<(u16,u16)>, String> {
+fn make_limits(res: &str) -> Result<Option<(u16,u16)>, String> {
     let parts: Vec<&str> = res.split(',').collect();
     if parts.len() == 1 {
         if parts[0] != "0" {
@@ -496,6 +496,26 @@ fn validate_gpu_id(gpu: u32) -> Result<(), String> {
     }
 }
 
+trait ProcessOrDefault<T> {
+    fn opt_process_or_default<F>(&self, nm: &str, on_arg: F, default: T) -> T
+        where F: Fn(&str) -> T;
+}
+
+impl<T> ProcessOrDefault<T> for getopts::Matches {
+    fn opt_process_or_default<F>(&self, nm: &str, on_arg: F, default: T) -> T
+        where F: Fn(&str) -> T
+    {
+        if self.opt_present(nm) {
+            match self.opt_str(nm) {
+                Some(arg) => on_arg(&arg),
+                None => panic!("{} was not a getopts::Options::optopt() option", nm)
+            }
+        } else {
+            default
+        }
+    }
+}
+
 pub fn main() {
 
     let args: Vec<String> = env::args().collect();
@@ -503,7 +523,10 @@ pub fn main() {
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(e) => panic!("Could not parse command line: {:?}", e)
+        Err(e) => {
+            eprintln!("Could not parse command line: {:?}", e);
+            process::exit(1);
+       }
     };
 
     if matches.opt_present("h") {
@@ -527,52 +550,41 @@ pub fn main() {
 
     let force_update = matches.opt_present("f");
 
-    let limits: Option<(u16, u16)>;
-    if matches.opt_present("l") {
-        match matches.opt_str("l") {
-            Some(res) => {
-                match make_limits(res) {
-                    Ok(lims) => { limits = lims },
-                    Err(e) => {
+    let limits = matches.opt_process_or_default(
+        "l",
+        |arg: &str| {
+            match make_limits(arg) {
+                Ok(lims) => lims,
+                Err(e) => {
+                    error!("{}", e);
+                    process::exit(1);
+                }
+            }
+        },
+        // Default limits
+        Some((20, 80))
+    );
+
+
+    let gpu = matches.opt_process_or_default(
+        "g",
+        |arg: &str| {
+            match arg.parse::<u32>() {
+                Ok(v) => {
+                    validate_gpu_id(v).unwrap_or_else(|e| {
                         error!("{}", e);
                         process::exit(1);
-                    }
+                    });
+                    v
+                },
+                Err(e) => {
+                    error!("Option \"-g\" present but non-valid: \"{}\": {}", e, arg);
+                    process::exit(1);
                 }
-            },
-            None => {
-                error!("Option \"-l\" present but no argument provided");
-                process::exit(1);
             }
-        }
-    } else {
-        // Default limits
-        limits = Some((20, 80));
-    }
-
-    let gpu: u32;
-
-    if matches.opt_present("g") {
-        gpu = match matches.opt_str("g") {
-            Some(g) => {
-                match g.parse::<u32>() {
-                    Ok(v) => {
-                        validate_gpu_id(v).unwrap_or_else(|e| {
-                            error!("{}", e);
-                            process::exit(1);
-                        });
-                        v
-                    },
-                    Err(e) => {
-                        error!("Option \"-g\" present but non-valid: \"{}\": {}", e, g);
-                        process::exit(1);
-                    }
-                }
-            },
-            None => { 0 }
-        }
-    } else {
-        gpu = 0;
-    }
+        },
+        0
+    );
 
     match register_signal_handlers() {
         Ok(_) => {},
