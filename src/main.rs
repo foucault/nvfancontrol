@@ -30,6 +30,9 @@ use std::net::{TcpListener, TcpStream, Shutdown};
 pub mod config;
 use self::config::{Curve};
 
+pub mod fanspeedcurve;
+use fanspeedcurve::FanspeedCurve;
+
 const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
 const DEFAULT_PORT: u32 = 12125;
@@ -63,7 +66,7 @@ impl Log for Logger {
 struct NVFanManager {
     gpu: u32,
     ctrl: NvidiaControl,
-    points: Vec<(u16, u16)>,
+    curve: FanspeedCurve,
     on_time: Option<f64>,
     force: bool
 }
@@ -79,7 +82,7 @@ impl Drop for NVFanManager {
 
 impl NVFanManager {
     fn new(
-            gpu: u32, points: Vec<(u16, u16)>, force: bool, limits: Option<(u16, u16)>
+            gpu: u32, curve: FanspeedCurve, force: bool, limits: Option<(u16, u16)>
         ) -> Result<NVFanManager, String> {
 
         let ctrl = NvidiaControl::new(limits)?;
@@ -103,12 +106,10 @@ impl NVFanManager {
             return Err(format!("GPU id {} is not valid; min: 0 max: {}", gpu, gpu_count-1));
         }
 
-        debug!("Curve points: {:?}", points);
-
         let ret = NVFanManager {
             gpu: gpu,
             ctrl: ctrl,
-            points: points,
+            curve: curve,
             on_time: None,
             force: force
         };
@@ -151,10 +152,6 @@ impl NVFanManager {
         let utilization = self.ctrl.get_utilization(self.gpu)?;
         let gutil = utilization.get("graphics");
 
-        let pfirst = self.points.first().unwrap();
-        let plast = self.points.last().unwrap();
-
-
         if rpm > 0 && !self.force {
             if let NVCtrlFanControlState::Auto = ctrl_status {
                 debug!("Fan is enabled on auto control; doing nothing");
@@ -162,59 +159,36 @@ impl NVFanManager {
             };
         }
 
-        if temp < pfirst.0 && self.on_time.is_some() {
-            let now = time::precise_time_s();
-            let dif = now - self.on_time.unwrap();
+        let speed = self.curve.speed_y(temp);
 
-            debug!("{} seconds elapsed since fan was last on", dif as u64);
-
-            // if utilization can't be retrieved the utilization leg is
-            // always false and ignored
-            if dif < 240.0 || gutil.unwrap_or(&-1) > &25 {
-                if let Err(e) = self.set_fans(pfirst.1 as i32) { return Err(e); }
-            } else {
-                debug!("Grace period expired; turning fan off");
-                self.on_time = None;
-            }
-            return Ok(());
-        }
-
-        if temp > plast.0 {
-            debug!("Temperature outside curve; setting to max");
-
-            for c in coolers {
-                if let Err(e) = self.set_fan(*c, plast.1 as i32) { return Err(e); }
-            }
-
-            return Ok(());
-        }
-
-        for i in 0..(self.points.len()-1) {
-            let p1 = self.points[i];
-            let p2 = self.points[i+1];
-
-            if temp >= p1.0 && temp < p2.0 {
-                let dx = p2.0 - p1.0;
-                let dy = p2.1 - p1.1;
-
-                let slope = (dy as f32) / (dx as f32);
-
-                let y = (p1.1 as f32) + (((temp - p1.0) as f32) * slope);
-
+        match (speed, self.on_time) {
+            (Some(y), _) => {
                 self.on_time = Some(time::precise_time_s());
+                self.set_fans(y)
+            },
+            (None, Some(t)) => {
+                let now = time::precise_time_s();
+                let diff = now - t;
 
-                if let Err(e) = self.set_fans(y as i32) { return Err(e); }
+                debug!("{} seconds elapsed since fan was last on", diff as u64);
 
-                return Ok(());
-            }
+                // if utilization can't be retrieved the utilization leg is
+                // always false and ignored
+                if diff < 240.0 || gutil.unwrap_or(&-1) > &25 {
+                    self.set_fans(self.curve.minspeed())
+                } else {
+                    debug!("Grace period expired; turning fan off");
+                    self.on_time = None;
+                    self.reset_fan()
+                }
+            },
+            (None, None) => {
+                // If no point is found then fan should be off
+                self.on_time = None;
+                self.reset_fan()
+
+            },
         }
-
-        // If no point is found then fan should be off
-        self.on_time = None;
-        if let Err(e) = self.reset_fan() { return Err(e); }
-
-        Ok(())
-
     }
 }
 
@@ -586,7 +560,7 @@ pub fn main() {
         }
     }
 
-    let curve: Vec<(u16, u16)> = match find_config_file() {
+    let points: Vec<(u16, u16)> = match find_config_file() {
         Some(path) => {
             info!("Loading configuration file: {:?}", path);
             match config::from_file(path) {
@@ -600,6 +574,16 @@ pub fn main() {
         None => {
             warn!("No config file found; using default curve");
             make_default_curve(gpu)
+        }
+    };
+
+    debug!("Curve points: {:?}", points);
+
+    let curve = match FanspeedCurve::new(points) {
+        Ok(curve) => curve,
+        Err(msg) => {
+            error!("{}", msg.to_string());
+            process::exit(1);
         }
     };
 
