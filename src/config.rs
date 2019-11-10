@@ -5,6 +5,7 @@ use std::path::PathBuf;
 pub trait Curve {
     fn points(&self, id: usize) -> &Vec<(u16, u16)>;
     fn enabled(&self, id: usize) -> bool;
+    fn fanflicker(&self, id: usize) -> Option<(u16, u16)>;
 }
 
 #[derive(Debug, Deserialize)]
@@ -28,6 +29,7 @@ pub struct TomlConf {
     #[serde(default = "true_")]
     enabled: bool,
     points: Vec<(u16, u16)>,
+    fanflicker: Option<(u16, u16)>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,6 +49,13 @@ impl Curve for Config {
         match self {
             Config::Toml(conf) => conf.gpus[id].enabled,
             Config::Legacy(_) => true,
+        }
+    }
+
+    fn fanflicker(&self, id: usize) ->  Option<(u16, u16)> {
+        match self {
+            Config::Toml(conf) => conf.gpus[id].fanflicker,
+            Config::Legacy(_) => None,
         }
     }
 }
@@ -71,6 +80,7 @@ fn test_valid_toml_from_string() {
                             id = 0
                             enabled = true
                             points = [[1, 2], [3, 4], [5, 6]]
+                            fanflicker = [22, 33]
 
                             [[gpu]]
                             id = 1
@@ -86,11 +96,13 @@ fn test_valid_toml_from_string() {
         let g0 = &cfg.gpus[0];
         assert_eq!(g0.id, 0);
         assert_eq!(g0.enabled, true);
+        assert_eq!(g0.fanflicker, Some((22, 33)));
         assert_eq!(g0.points, vec![(1, 2), (3, 4), (5, 6)]);
 
         let g1 = &cfg.gpus[1];
         assert_eq!(g1.id, 1);
         assert_eq!(g1.enabled, false);
+        assert_eq!(g1.fanflicker, None);
         assert_eq!(g1.points, vec![(6, 7), (8, 9)]);
     } else {
         assert!(false, "Not a Config::Toml(..) enum value");
@@ -110,6 +122,7 @@ fn test_defaults_with_toml_from_string() {
         let g0 = &cfg.gpus[0];
         assert_eq!(g0.id, 0);
         assert_eq!(g0.enabled, true);
+        assert_eq!(g0.fanflicker, None);
         assert_eq!(g0.points, vec![(11, 22), (33, 44)]);
     } else {
         assert!(false, "Not a Config::Toml(..) enum value");

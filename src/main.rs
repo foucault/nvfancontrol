@@ -30,6 +30,12 @@ use std::net::{TcpListener, TcpStream, Shutdown};
 pub mod config;
 use self::config::{Curve};
 
+pub mod fanflicker;
+use fanflicker::{FanFlickerFix, FanFlickerRange};
+
+pub mod fanspeedcurve;
+use fanspeedcurve::FanspeedCurve;
+
 const CONF_FILE: &'static str = "nvfancontrol.conf";
 const MIN_VERSION: f32 = 352.09;
 const DEFAULT_PORT: u32 = 12125;
@@ -63,9 +69,10 @@ impl Log for Logger {
 struct NVFanManager {
     gpu: u32,
     ctrl: NvidiaControl,
-    points: Vec<(u16, u16)>,
+    curve: FanspeedCurve,
     on_time: Option<f64>,
-    force: bool
+    force: bool,
+    fanflicker: Option<FanFlickerFix>,
 }
 
 impl Drop for NVFanManager {
@@ -79,8 +86,12 @@ impl Drop for NVFanManager {
 
 impl NVFanManager {
     fn new(
-            gpu: u32, points: Vec<(u16, u16)>, force: bool, limits: Option<(u16, u16)>
-        ) -> Result<NVFanManager, String> {
+        gpu: u32,
+        curve: FanspeedCurve,
+        force: bool,
+        limits: Option<(u16, u16)>,
+        fanflickerrange: Option<FanFlickerRange>,
+    ) -> Result<NVFanManager, String> {
 
         let ctrl = NvidiaControl::new(limits)?;
         let gpu_count = ctrl.gpu_count()?;
@@ -103,14 +114,19 @@ impl NVFanManager {
             return Err(format!("GPU id {} is not valid; min: 0 max: {}", gpu, gpu_count-1));
         }
 
-        debug!("Curve points: {:?}", points);
-
         let ret = NVFanManager {
             gpu: gpu,
-            ctrl: ctrl,
-            points: points,
+            curve: curve,
             on_time: None,
-            force: force
+            force: force,
+            fanflicker: match fanflickerrange {
+                Some(range) => {
+                    let prev = (range.fickering_starts as i32).max(ctrl.get_fanspeed(0, gpu)?);
+                    Some(FanFlickerFix::new(range, prev))
+                },
+                None => None
+            },
+            ctrl: ctrl,
         };
 
         Ok(ret)
@@ -151,10 +167,6 @@ impl NVFanManager {
         let utilization = self.ctrl.get_utilization(self.gpu)?;
         let gutil = utilization.get("graphics");
 
-        let pfirst = self.points.first().unwrap();
-        let plast = self.points.last().unwrap();
-
-
         if rpm > 0 && !self.force {
             if let NVCtrlFanControlState::Auto = ctrl_status {
                 debug!("Fan is enabled on auto control; doing nothing");
@@ -162,59 +174,47 @@ impl NVFanManager {
             };
         }
 
-        if temp < pfirst.0 && self.on_time.is_some() {
-            let now = time::precise_time_s();
-            let dif = now - self.on_time.unwrap();
+        let speed = self.curve.speed_y(temp);
 
-            debug!("{} seconds elapsed since fan was last on", dif as u64);
-
-            // if utilization can't be retrieved the utilization leg is
-            // always false and ignored
-            if dif < 240.0 || gutil.unwrap_or(&-1) > &25 {
-                if let Err(e) = self.set_fans(pfirst.1 as i32) { return Err(e); }
-            } else {
-                debug!("Grace period expired; turning fan off");
-                self.on_time = None;
-            }
-            return Ok(());
-        }
-
-        if temp > plast.0 {
-            debug!("Temperature outside curve; setting to max");
-
-            for c in coolers {
-                if let Err(e) = self.set_fan(*c, plast.1 as i32) { return Err(e); }
-            }
-
-            return Ok(());
-        }
-
-        for i in 0..(self.points.len()-1) {
-            let p1 = self.points[i];
-            let p2 = self.points[i+1];
-
-            if temp >= p1.0 && temp < p2.0 {
-                let dx = p2.0 - p1.0;
-                let dy = p2.1 - p1.1;
-
-                let slope = (dy as f32) / (dx as f32);
-
-                let y = (p1.1 as f32) + (((temp - p1.0) as f32) * slope);
-
+        match (speed, self.on_time, &mut self.fanflicker) {
+            (Some(y), _, None) => {
                 self.on_time = Some(time::precise_time_s());
+                self.set_fans(y)
+            },
+            (None, Some(t), None) => {
+                let now = time::precise_time_s();
+                let diff = now - t;
 
-                if let Err(e) = self.set_fans(y as i32) { return Err(e); }
+                debug!("{} seconds elapsed since fan was last on", diff as u64);
 
-                return Ok(());
-            }
+                // if utilization can't be retrieved the utilization leg is
+                // always false and ignored
+                if diff < 240.0 || gutil.unwrap_or(&-1) > &25 {
+                    self.set_fans(self.curve.minspeed())
+                } else {
+                    debug!("Grace period expired; turning fan off");
+                    self.on_time = None;
+                    self.reset_fan()
+                }
+            },
+            (None, None, None) => {
+                // If no point is found then fan should be off
+                self.on_time = None;
+                self.reset_fan()
+            },
+            (Some(y), _, Some(fff)) => {
+                let y = fff.fix_speed(rpm, y);
+                self.set_fans(y)
+            },
+            (None, _, Some(fff)) => {
+                // The jump from 0 to some RPM (presumably in the flicker range) will
+                // cause flickering, which will then raise the RPM too much. So keep
+                // it at the lowest speed.
+                debug!("FanFlickerFix: preventing fan-off");
+                let new_speed = fff.fix_speed(rpm, fff.minimum());
+                self.set_fans(new_speed)
+            },
         }
-
-        // If no point is found then fan should be off
-        self.on_time = None;
-        if let Err(e) = self.reset_fan() { return Err(e); }
-
-        Ok(())
-
     }
 }
 
@@ -257,40 +257,32 @@ fn register_signal_handlers() -> Result<(), String> {
     }
 }
 
-fn make_limits(res: &str) -> Result<Option<(u16,u16)>, String> {
-    let parts: Vec<&str> = res.split(',').collect();
+fn parse_ascending_arg_pair(nm: &str, res: &str) -> Result<Option<(u16,u16)>, String> {
+    let parts: Vec<&str> = res.split(',').map(|s| s.trim()).collect();
+    let invalidopt = format!("Invalid option for \"-{}\"", nm);
     if parts.len() == 1 {
         if parts[0] != "0" {
-            Err(format!("Invalid option for \"-l\": {}", parts[0]))
+            Err(format!("{}: {}", invalidopt, parts[0]))
         } else {
             Ok(None)
         }
     } else if parts.len() == 2 {
-        let lower = match parts[0].parse::<u16>() {
-            Ok(num) => num,
-            Err(e) => {
-                return Err(format!("Could not parse {} as lower limit: {}", parts[0], e));
-            }
-        };
-        let upper = match parts[1].parse::<u16>() {
-            Ok(num) => num,
-            Err(e) => {
-                return Err(format!("Could not parse {} as upper limit: {}", parts[1], e));
-            }
-        };
-
-        if upper < lower {
-            return Err(format!("Lower limit {} is greater than the upper {}", lower, upper));
-        }
-
-        if upper > 100 {
-            debug!("Upper limit {} is > 100; clipping to 100", upper);
-            Ok(Some((lower, 100)))
-        } else {
-            Ok(Some((lower, upper)))
+        match (parts[0].parse::<u16>(), parts[1].parse::<u16>()) {
+            (Err(e), _) =>
+                Err(format!("{}: could not parse {} as lower limit: {}", invalidopt, parts[0], e)),
+            (_, Err(e)) =>
+                Err(format!("{}: could not parse {} as upper limit: {}", invalidopt, parts[1], e)),
+            (Ok(lower), Ok(upper)) if lower > upper =>
+                Err(format!("{}: lower limit {} is greater than upper limit {}", invalidopt, lower, upper)),
+            (Ok(lower), Ok(upper)) if upper > 100 => {
+                debug!("Upper limit {} is > 100; clipping to 100", upper);
+                Ok(Some((lower, 100)))
+            },
+            (Ok(lower), Ok(upper)) =>
+                Ok(Some((lower, upper))),
         }
     } else {
-        Err(format!("Invalid argument for \"-l\": {:?}", parts))
+        Err(format!("Invalid argument for \"-{}\": {:?}", nm, parts))
     }
 }
 
@@ -368,6 +360,10 @@ fn make_options() -> Options {
                     over a tcp port. Can be optionally followed by the port
                     number over which the server will listen for incoming
                     connections", "PORT");
+    opts.optopt("r", "fanflicker", "Range in which fan flicker is prevented,
+                     specify as with \"-l\". Also makes fan spin with at
+                     least the specified lower limit which must not be zero.",
+                     "LOWER,UPPER");
     opts.optflag("h", "help", "Print this help message");
 
     opts
@@ -553,7 +549,7 @@ pub fn main() {
     let limits = matches.opt_process_or_default(
         "l",
         |arg: &str| {
-            match make_limits(arg) {
+            match parse_ascending_arg_pair("l", arg) {
                 Ok(lims) => lims,
                 Err(e) => {
                     error!("{}", e);
@@ -594,11 +590,16 @@ pub fn main() {
         }
     }
 
-    let curve: Vec<(u16, u16)> = match find_config_file() {
+    let mut fanflicker = None;
+
+    let points: Vec<(u16, u16)> = match find_config_file() {
         Some(path) => {
             info!("Loading configuration file: {:?}", path);
             match config::from_file(path) {
-                Ok(c) => c.points(gpu as usize).to_vec(),
+                Ok(c) => {
+                    fanflicker = c.fanflicker(gpu as usize);
+                    c.points(gpu as usize).to_vec()
+                }
                 Err(e) => {
                     warn!("{}; using default curve", e);
                     make_default_curve(gpu)
@@ -611,7 +612,43 @@ pub fn main() {
         }
     };
 
-    let mut mgr = match NVFanManager::new(gpu, curve, force_update, limits) {
+    debug!("Curve points: {:?}", points);
+
+    let curve = match FanspeedCurve::new(points) {
+        Ok(curve) => curve,
+        Err(msg) => {
+            error!("{}", msg.to_string());
+            process::exit(1);
+        }
+    };
+
+    let fanflicker = matches.opt_process_or_default(
+        "r",
+        |arg: &str| {
+            match parse_ascending_arg_pair("r", arg) {
+                Ok(fanflicker) => fanflicker,
+                Err(e) => {
+                    error!("{}", e);
+                    process::exit(1);
+                }
+            }
+        },
+        // from the config file, overridden by the commandline if present
+        fanflicker
+    );
+
+    let fanflickerrange = match fanflicker {
+        Some(range) => match FanFlickerRange::new(range, &curve, &limits) {
+            Ok(range) => Some(range),
+            Err(e) => {
+                error!("{}", e);
+                process::exit(1);
+            },
+        }
+        None => None,
+    };
+
+    let mut mgr = match NVFanManager::new(gpu, curve, force_update, limits, fanflickerrange) {
         Ok(m) => m,
         Err(s) => {
             error!("{}", s);
