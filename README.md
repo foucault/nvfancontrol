@@ -135,6 +135,18 @@ be followed by a port number (default port is 12125). The server prints the
 JSON data through the socket and immediately closes the connection. The message
 is always terminated with a new-line character.
 
+### Fan flicker prevention
+
+Due to firmware issues in several RTX series GPUs fans will tend to rapidly
+turn on and off at low speeds (fan flickering). To counter this `nvfancontrol`
+includes a workaround which is accessible using the `-r` or `--fanflicker`
+switch (config. option `fanflicker = [min, max]`). Fan flicker prevention will
+attempt to gradually lower or increase the fan speed within a user-specified
+range (the *flickering* zone). When the fan speed drops below the `min`
+flickering prevention will kick in. As an example for `min = 11` and `max = 38`
+curve changes are applied gradually. Above `38%` behaviour is normal and
+arbitrary jumps are again allowed.
+
 Bugs and known issues
 ---------------------
 Although nvfancontrol should work with most Fermi or newer NVidia cards it has
