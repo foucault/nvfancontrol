@@ -132,12 +132,6 @@ impl NVFanManager {
         Ok(ret)
     }
 
-    fn set_fan(&self, id: u32, speed: i32) -> Result<(), String> {
-        self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Manual)?;
-        self.ctrl.set_fanspeed(self.gpu, id, speed)?;
-        Ok(())
-    }
-
     fn set_fans(&self, speed: i32) -> Result<(), String> {
         self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Manual)?;
         let coolers = &*self.ctrl.gpu_coolers(self.gpu)?;
