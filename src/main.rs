@@ -257,40 +257,32 @@ fn register_signal_handlers() -> Result<(), String> {
     }
 }
 
-fn make_limits(res: &str) -> Result<Option<(u16,u16)>, String> {
-    let parts: Vec<&str> = res.split(',').collect();
+fn parse_ascending_arg_pair(nm: &str, res: &str) -> Result<Option<(u16,u16)>, String> {
+    let parts: Vec<&str> = res.split(',').map(|s| s.trim()).collect();
+    let invalidopt = format!("Invalid option for \"-{}\"", nm);
     if parts.len() == 1 {
         if parts[0] != "0" {
-            Err(format!("Invalid option for \"-l\": {}", parts[0]))
+            Err(format!("{}: {}", invalidopt, parts[0]))
         } else {
             Ok(None)
         }
     } else if parts.len() == 2 {
-        let lower = match parts[0].parse::<u16>() {
-            Ok(num) => num,
-            Err(e) => {
-                return Err(format!("Could not parse {} as lower limit: {}", parts[0], e));
-            }
-        };
-        let upper = match parts[1].parse::<u16>() {
-            Ok(num) => num,
-            Err(e) => {
-                return Err(format!("Could not parse {} as upper limit: {}", parts[1], e));
-            }
-        };
-
-        if upper < lower {
-            return Err(format!("Lower limit {} is greater than the upper {}", lower, upper));
-        }
-
-        if upper > 100 {
-            debug!("Upper limit {} is > 100; clipping to 100", upper);
-            Ok(Some((lower, 100)))
-        } else {
-            Ok(Some((lower, upper)))
+        match (parts[0].parse::<u16>(), parts[1].parse::<u16>()) {
+            (Err(e), _) =>
+                Err(format!("{}: could not parse {} as lower limit: {}", invalidopt, parts[0], e)),
+            (_, Err(e)) =>
+                Err(format!("{}: could not parse {} as upper limit: {}", invalidopt, parts[1], e)),
+            (Ok(lower), Ok(upper)) if lower > upper =>
+                Err(format!("{}: lower limit {} is greater than upper limit {}", invalidopt, lower, upper)),
+            (Ok(lower), Ok(upper)) if upper > 100 => {
+                debug!("Upper limit {} is > 100; clipping to 100", upper);
+                Ok(Some((lower, 100)))
+            },
+            (Ok(lower), Ok(upper)) =>
+                Ok(Some((lower, upper))),
         }
     } else {
-        Err(format!("Invalid argument for \"-l\": {:?}", parts))
+        Err(format!("Invalid argument for \"-{}\": {:?}", nm, parts))
     }
 }
 
@@ -553,7 +545,7 @@ pub fn main() {
     let limits = matches.opt_process_or_default(
         "l",
         |arg: &str| {
-            match make_limits(arg) {
+            match parse_ascending_arg_pair("l", arg) {
                 Ok(lims) => lims,
                 Err(e) => {
                     error!("{}", e);
