@@ -717,7 +717,7 @@ pub fn main() {
         }
 
         let mut raw_data = data.write().unwrap();
-        (*raw_data).update_from_mgr(time::now().to_timespec().sec, &mgr, 0);
+        (*raw_data).update_from_mgr(time::PrimitiveDateTime::now().timestamp(), &mgr, 0);
         drop(raw_data);
 
         let raw_data = data.read().unwrap();
