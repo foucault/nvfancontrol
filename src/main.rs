@@ -70,7 +70,7 @@ struct NVFanManager {
     gpu: u32,
     ctrl: NvidiaControl,
     curve: FanspeedCurve,
-    on_time: Option<f64>,
+    on_time: Option<i64>,
     force: bool,
     fanflicker: Option<FanFlickerFix>,
 }
@@ -172,18 +172,18 @@ impl NVFanManager {
 
         match (speed, self.on_time, &mut self.fanflicker) {
             (Some(y), _, None) => {
-                self.on_time = Some(time::precise_time_s());
+                self.on_time = Some(time::PrimitiveDateTime::now().timestamp());
                 self.set_fans(y)
             },
             (None, Some(t), None) => {
-                let now = time::precise_time_s();
+                let now = time::PrimitiveDateTime::now().timestamp();
                 let diff = now - t;
 
                 debug!("{} seconds elapsed since fan was last on", diff as u64);
 
                 // if utilization can't be retrieved the utilization leg is
                 // always false and ignored
-                if diff < 240.0 || gutil.unwrap_or(&-1) > &25 {
+                if diff < 240 || gutil.unwrap_or(&-1) > &25 {
                     self.set_fans(self.curve.minspeed())
                 } else {
                     debug!("Grace period expired; turning fan off");
