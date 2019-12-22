@@ -7,6 +7,9 @@ use log::{Log, Record, LevelFilter, Metadata};
 extern crate getopts;
 use getopts::Options;
 
+extern crate regex;
+use regex::Regex;
+
 #[cfg(windows)] extern crate ctrlc;
 #[cfg(unix)] extern crate nix;
 #[cfg(unix)] use nix::sys::signal;
@@ -97,7 +100,7 @@ impl NVFanManager {
         let gpu_count = ctrl.gpu_count()?;
         let version: f32 = match ctrl.get_version() {
             Ok(v) => {
-                v.parse::<f32>().unwrap()
+                Regex::new(r"^(?P<a>\d+)\.(?P<i>\d+)\..*$").unwrap().replace(&v, "$a.$i").parse::<f32>().unwrap()
             }
             Err(e) => {
                 return Err(format!("Could not get driver version: {}", e))
@@ -650,8 +653,8 @@ pub fn main() {
         }
     };
 
-    info!("NVIDIA driver version: {:.2}",
-          mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
+    info!("NVIDIA driver version: {}",
+          mgr.ctrl.get_version().unwrap());
     let gpu_count = mgr.ctrl.gpu_count().unwrap();
     for i in 0u32..gpu_count {
         info!("NVIDIA graphics adapter #{}: {}", i,
