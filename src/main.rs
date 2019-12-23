@@ -95,20 +95,14 @@ impl NVFanManager {
 
         let ctrl = NvidiaControl::new(limits)?;
         let gpu_count = ctrl.gpu_count()?;
-        let version: f32 = match ctrl.get_version() {
+        match ctrl.get_version() {
             Ok(v) => {
-                v.parse::<f32>().unwrap()
+                validate_driver_version(v)?;
             }
             Err(e) => {
                 return Err(format!("Could not get driver version: {}", e))
             }
         };
-
-        if version < MIN_VERSION {
-            let err = format!("Unsupported driver version; need >= {:.2}",
-                              MIN_VERSION);
-            return Err(err);
-        }
 
         if gpu > gpu_count-1 {
             return Err(format!("GPU id {} is not valid; min: 0 max: {}", gpu, gpu_count-1));
@@ -486,6 +480,34 @@ fn validate_gpu_id(gpu: u32) -> Result<(), String> {
     }
 }
 
+fn validate_driver_version(version: String) -> Result<(), String> {
+    let parts: Vec<&str> = version.split(".").collect();
+
+    let major = parts[0];
+    let minor: &str;
+    if parts.len() < 2 {
+        minor = "00";
+    } else {
+        minor = parts[1];
+    }
+
+    let version_str = format!("{}.{}", major, minor);
+    let version_num = version_str.parse::<f32>();
+
+    if version_num.is_err() {
+        return Err("Could not parse driver version".to_string());
+    }
+
+    if version_num.unwrap() < MIN_VERSION {
+        let err = format!("Unsupported driver version; need >= {:.2}",
+                          MIN_VERSION);
+        return Err(err);
+    }
+
+    Ok(())
+
+}
+
 trait ProcessOrDefault<T> {
     fn opt_process_or_default<F>(&self, nm: &str, on_arg: F, default: T) -> T
         where F: Fn(&str) -> T;
@@ -650,8 +672,8 @@ pub fn main() {
         }
     };
 
-    info!("NVIDIA driver version: {:.2}",
-          mgr.ctrl.get_version().unwrap().parse::<f32>().unwrap());
+    info!("NVIDIA driver version: {}",
+          mgr.ctrl.get_version().unwrap());
     let gpu_count = mgr.ctrl.gpu_count().unwrap();
     for i in 0u32..gpu_count {
         info!("NVIDIA graphics adapter #{}: {}", i,
