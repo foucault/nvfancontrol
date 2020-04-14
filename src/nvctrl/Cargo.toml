@@ -5,13 +5,13 @@ authors = ["Spyros Stathopoulos <spystath@gmail.com>"]
 build = "build.rs"
 
 [dependencies]
-libc = "*"
+libc = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
 
 [target.'cfg(windows)'.dependencies]
-libloading = "*"
-lazy_static = "*"
+libloading = "0.6"
+lazy_static = "1.4"
 
 [lib]
 name = "nvctrl"
