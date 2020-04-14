@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        build:
+          # MSRV, stable, and next.
+          - pinned-linux
+          - stable
+          - beta
+          # Best-effort Windows.
+          - pinned-windows
+        include:
+          - build: pinned-linux
+            os: ubuntu-18.04
+            rust: 1.36.0
+
+          - build: stable
+            os: ubuntu-18.04
+            rust: stable
+
+          - build: beta
+            os: ubuntu-18.04
+            rust: beta
+
+          - build: pinned-windows
+            os: windows-2019
+            rust: 1.40.0
+    env:
+      # libXNVCtrl.a in Ubuntu
+      LIBRARY_PATH: /usr/lib/x86_64-linux-gnu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install packages (Ubuntu)
+        if: matrix.os == 'ubuntu-18.04'
+        run: |
+          ci/ubuntu-install-packages
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          profile: minimal
+          override: true
+
+      # Can't (easily) install NVAPI for Windows. :(
+      - name: Check-only (Windows)
+        if: matrix.os == 'windows-2019'
+        run: cargo check --verbose
+
+      - name: Build
+        if: matrix.os != 'windows-2019'
+        run: cargo build --verbose
+
+      - name: Test
+        if: matrix.os != 'windows-2019'
+        run: cargo test --verbose
