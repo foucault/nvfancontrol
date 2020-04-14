@@ -70,7 +70,7 @@ struct NVFanManager {
     gpu: u32,
     ctrl: NvidiaControl,
     curve: FanspeedCurve,
-    on_time: Option<i64>,
+    on_time: Option<f64>,
     force: bool,
     fanflicker: Option<FanFlickerFix>,
 }
@@ -166,18 +166,21 @@ impl NVFanManager {
 
         match (speed, self.on_time, &mut self.fanflicker) {
             (Some(y), _, None) => {
-                self.on_time = Some(time::PrimitiveDateTime::now().timestamp());
+                let since_epoch: time::Duration =
+                    time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+                self.on_time = Some(since_epoch.as_seconds_f64());
                 self.set_fans(y)
             },
             (None, Some(t), None) => {
-                let now = time::PrimitiveDateTime::now().timestamp();
+                let since_epoch: time::Duration = time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+                let now = since_epoch.as_seconds_f64();
                 let diff = now - t;
 
                 debug!("{} seconds elapsed since fan was last on", diff as u64);
 
                 // if utilization can't be retrieved the utilization leg is
                 // always false and ignored
-                if diff < 240 || gutil.unwrap_or(&-1) > &25 {
+                if diff < 240.0 || gutil.unwrap_or(&-1) > &25 {
                     self.set_fans(self.curve.minspeed())
                 } else {
                     debug!("Grace period expired; turning fan off");
@@ -739,7 +742,9 @@ pub fn main() {
         }
 
         let mut raw_data = data.write().unwrap();
-        (*raw_data).update_from_mgr(time::PrimitiveDateTime::now().timestamp(), &mgr, 0);
+        let since_epoch: time::Duration =
+                time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+        (*raw_data).update_from_mgr(since_epoch.whole_seconds(), &mgr, 0);
         drop(raw_data);
 
         let raw_data = data.read().unwrap();
