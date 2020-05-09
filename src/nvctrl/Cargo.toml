@@ -19,3 +19,4 @@ path = "lib.rs"
 
 [features]
 dynamic-xnvctrl = []
+rtx = []

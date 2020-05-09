@@ -6,6 +6,7 @@ use std::ffi::CStr;
 use std::mem;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::env;
 use libc;
 use ::{NVCtrlFanControlState, NvFanController};
@@ -393,7 +394,7 @@ enum NV_COOLER_POLICY {
 /// Cooler control mode (client API)
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-#[allow(non_came_case_types)]
+#[allow(non_camel_case_types)]
 #[allow(dead_code)]
 enum NV_COOLER_CONTROL_MODE {
     AUTO = 0,
@@ -743,20 +744,37 @@ impl NvFanController for NvidiaControl {
 
         self.check_gpu_id(gpu)?;
 
-        let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize],
-                                                   NVAPI_COOLER_TARGET_ALL as _,
-                                                   &mut cooler_settings) }
-        {
-            0 => {
-                let count = cooler_settings.count as u32;
-                Ok(Cow::Owned(
-                    (0..count).collect::<Vec<u32>>()))
-            },
-            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+        #[cfg(not(feature="rtx"))] {
+            let mut cooler_settings = NvGpuCoolerSettings::new();
+            match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize],
+                                                       NVAPI_COOLER_TARGET_ALL as _,
+                                                       &mut cooler_settings) }
+            {
+                0 => {
+                    let count = cooler_settings.count as u32;
+                    Ok(Cow::Owned(
+                        (0..count).collect::<Vec<u32>>()))
+                },
+                i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+            }
+        }
+        #[cfg(feature="rtx")] {
+            let mut status  = NvGpuFanCoolersStatus::new();
+            match unsafe {
+                NvAPI_GPU_GetClientFanCoolersStatus(self.handles[gpu as usize],
+                    &mut status)
+            } {
+                0 => {
+                    let count = status.count as u32;
+                    Ok(Cow::Owned(
+                        (0..count).collect::<Vec<u32>>()))
+                },
+                i => Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
+            }
         }
     }
 
+    #[cfg(not(feature="rtx"))]
     fn get_ctrl_status(&self, gpu: u32) -> Result<NVCtrlFanControlState, String> {
 
         self.check_gpu_id(gpu)?;
@@ -791,6 +809,31 @@ impl NvFanController for NvidiaControl {
         }
     }
 
+    #[cfg(feature="rtx")]
+    fn get_ctrl_status(&self, gpu: u32) -> Result<NVCtrlFanControlState, String> {
+
+        self.check_gpu_id(gpu)?;
+
+        let mut control = NvGpuFanCoolersControl::new();
+        match unsafe {
+            NvAPI_GPU_GetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
+        } {
+            0 => {
+                if control.count == 0 {
+                    return Err("No available coolers".to_string());
+                }
+
+                match control.coolers[0].mode {
+                    NV_COOLER_CONTROL_MODE::AUTO => Ok(NVCtrlFanControlState::Auto),
+                    NV_COOLER_CONTROL_MODE::MANUAL => Ok(NVCtrlFanControlState::Manual)
+                }
+            },
+            i => Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
+        }
+
+    }
+
+    #[cfg(not(feature="rtx"))]
     fn set_ctrl_type(&self, gpu: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
 
         self.check_gpu_id(gpu)?;
@@ -816,34 +859,92 @@ impl NvFanController for NvidiaControl {
 
     }
 
+    #[cfg(feature="rtx")]
+    fn set_ctrl_type(&self, gpu: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
+
+        self.check_gpu_id(gpu)?;
+
+        let mut control = NvGpuFanCoolersControl::new();
+        match unsafe {
+            NvAPI_GPU_GetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
+        } {
+            0 => {
+                if control.count == 0 {
+                    return Err("No available coolers".to_string());
+                }
+            },
+            i => {
+                return Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
+            }
+        }
+
+        // at this point `control` should be properly populated
+        let count = control.count as usize;
+        let policy = match typ {
+            NVCtrlFanControlState::Auto => NV_COOLER_CONTROL_MODE::AUTO,
+            NVCtrlFanControlState::Manual => NV_COOLER_CONTROL_MODE::MANUAL,
+        };
+
+        // update policies for all coolers
+        for c in 0..count {
+            control.coolers[c].mode = policy;
+        }
+
+        // and set it back
+        match unsafe {
+            NvAPI_GPU_SetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
+        } {
+            0 => Ok(()),
+            i => Err(format!("NvAPI_GPU_SetClientFanCoolersControl() failed; error {}", i))
+        }
+
+    }
+
     fn get_fanspeed(&self, gpu: u32, id: u32) -> Result<i32, String> {
 
         self.check_gpu_id(gpu)?;
 
-        let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize], id,
-                                                   &mut cooler_settings) }
-        {
-            0 => Ok(cooler_settings.coolers[id as usize].current_level),
-            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+        #[cfg(not(feature="rtx"))] {
+            let mut cooler_settings = NvGpuCoolerSettings::new();
+            match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize], id,
+                                                       &mut cooler_settings) }
+            {
+                0 => Ok(cooler_settings.coolers[id as usize].current_level),
+                i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+            }
+        }
+        #[cfg(feature="rtx")] {
+            let mut status = NvGpuFanCoolersStatus::new();
+            match unsafe {
+                NvAPI_GPU_GetClientFanCoolersStatus(self.handles[gpu as usize],
+                    &mut status)
+            } {
+                0 => Ok(status.coolers[id as usize].level.try_into().unwrap()),
+                i => Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
+            }
         }
     }
 
-     // There is a bug here but it's not of nvfancontrol. If the GPU has more than
-     // one cooler it is impossible to get its RPM reading since there is no function
-     // for that in NVAPI; NvAPI_GPU_GetTachReading does not allow indexing on the
-     // coolers. Unfortunately this RPM reading is probably meaningless on GPUs with
-     // multiple coolers. It might be the RPM of the first coolers or who knows? There
-     // is no documentation anywhere on the public NVAPI. In any case the GPU coolers
-     // API is butchered anyway because reasons.
-    fn get_fanspeed_rpm(&self, gpu: u32, _id: u32) -> Result<i32, String> {
+    fn get_fanspeed_rpm(&self, gpu: u32, id: u32) -> Result<i32, String> {
 
         self.check_gpu_id(gpu)?;
 
-        let mut speed = 0 as libc::c_uint;
-        match unsafe { NvAPI_GPU_GetTachReading(self.handles[gpu as usize], &mut speed) } {
-            0 => Ok(speed as i32),
-            i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i))
+        #[cfg(not(feature="rtx"))] {
+            let mut speed = 0 as libc::c_uint;
+            match unsafe { NvAPI_GPU_GetTachReading(self.handles[gpu as usize], &mut speed) } {
+                0 => Ok(speed as i32),
+                i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i))
+            }
+        }
+        #[cfg(feature="rtx")] {
+            let mut status = NvGpuFanCoolersStatus::new();
+            match unsafe {
+                NvAPI_GPU_GetClientFanCoolersStatus(self.handles[gpu as usize],
+                    &mut status)
+            } {
+                0 => Ok(status.coolers[id as usize].rpm.try_into().unwrap()),
+                i => Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
+            }
         }
     }
 
