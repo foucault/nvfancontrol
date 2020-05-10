@@ -6,7 +6,7 @@ use std::ffi::CStr;
 use std::mem;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::convert::TryInto;
+#[cfg(feature="rtx")] use std::convert::TryInto;
 use std::env;
 use libc;
 use ::{NVCtrlFanControlState, NvFanController};
@@ -948,6 +948,7 @@ impl NvFanController for NvidiaControl {
         }
     }
 
+    #[cfg(not(feature="rtx"))]
     fn set_fanspeed(&self, gpu: u32, id: u32, speed: i32) -> Result<(), String> {
 
         self.check_gpu_id(gpu)?;
@@ -970,6 +971,45 @@ impl NvFanController for NvidiaControl {
             i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
         }
     }
+
+    #[cfg(feature="rtx")]
+    fn set_fanspeed(&self, gpu: u32, id: u32, speed: i32) -> Result<(), String> {
+
+        self.check_gpu_id(gpu)?;
+
+        let true_speed = self.true_speed(speed);
+
+        let mut control = NvGpuFanCoolersControl::new();
+        match unsafe {
+            NvAPI_GPU_GetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
+        } {
+            0 => {
+                if control.count == 0 {
+                    return Err("No available coolers".to_string());
+                }
+            },
+            i => {
+                return Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
+            }
+        }
+
+        // at this point `control` should be properly populated
+        let count = control.count as usize;
+
+        for c in 0..count {
+            control.coolers[c].level = true_speed.try_into().unwrap();
+        }
+
+        // and set it back
+        match unsafe {
+            NvAPI_GPU_SetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
+        } {
+            0 => Ok(()),
+            i => Err(format!("NvAPI_GPU_SetClientFanCoolersControl() failed; error {}", i))
+        }
+
+    }
+
 
     fn get_version(&self) -> Result<String, String> {
         let mut b = NvAPI_ShortString::new();
