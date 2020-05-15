@@ -126,6 +126,13 @@ impl NVFanManager {
         Ok(ret)
     }
 
+    #[cfg(feature="rtx")]
+    fn set_fans(&self, speed: i32) -> Result<(), String> {
+        self.ctrl.set_fancontrol(self.gpu, speed, NVCtrlFanControlState::Manual)?;
+        Ok(())
+    }
+
+    #[cfg(not(feature="rtx"))]
     fn set_fans(&self, speed: i32) -> Result<(), String> {
         self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Manual)?;
         let coolers = &*self.ctrl.gpu_coolers(self.gpu)?;
@@ -167,12 +174,12 @@ impl NVFanManager {
         match (speed, self.on_time, &mut self.fanflicker) {
             (Some(y), _, None) => {
                 let since_epoch: time::Duration =
-                    time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+                    time::OffsetDateTime::now_utc() - time::OffsetDateTime::unix_epoch();
                 self.on_time = Some(since_epoch.as_seconds_f64());
                 self.set_fans(y)
             },
             (None, Some(t), None) => {
-                let since_epoch: time::Duration = time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+                let since_epoch: time::Duration = time::OffsetDateTime::now_utc() - time::OffsetDateTime::unix_epoch();
                 let now = since_epoch.as_seconds_f64();
                 let diff = now - t;
 
@@ -743,7 +750,7 @@ pub fn main() {
 
         let mut raw_data = data.write().unwrap();
         let since_epoch: time::Duration =
-                time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+                time::OffsetDateTime::now_utc() - time::OffsetDateTime::unix_epoch();
         (*raw_data).update_from_mgr(since_epoch.whole_seconds(), &mgr, 0);
         drop(raw_data);
 

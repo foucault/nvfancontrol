@@ -221,7 +221,7 @@ unsafe fn NvAPI_GPU_GetClientFanCoolersStatus(handle: NvPhysicalGpuHandlePtr,
 /// **Arguments**
 ///
 /// * `handle` - The GPU for which the utilisation is requested
-/// * `usages` - The `NvGpuFanCoolersStatus` containing the requested information; it
+/// * `status` - The `NvGpuFanCoolersStatus` containing the requested information; it
 /// will be populated upon function call
 #[allow(non_snake_case)]
 unsafe fn NvAPI_GPU_GetClientFanCoolersControl(handle: NvPhysicalGpuHandlePtr,
@@ -608,6 +608,7 @@ impl NvFanCoolerControl {
 
 /// GPU Fan control (new client API)
 #[repr(C)]
+#[derive(Debug)]
 struct NvGpuFanCoolersControl {
     version: u32,
     _reserved1: u32,
@@ -681,7 +682,7 @@ impl NvidiaControl {
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
             0 => {
-                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::uninitialized() };
+                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::MaybeUninit::uninit().assume_init() };
                 let mut count = 0 as u32;
                 match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
                     0 => Ok(NvidiaControl{ limits: lim,
@@ -716,6 +717,23 @@ impl NvidiaControl {
                         gpu, self._gpu_count - 1))
         } else {
             Ok(())
+        }
+    }
+
+    #[cfg(feature="rtx")]
+    fn get_ctrl(&self, gpu: u32) -> Result<NvGpuFanCoolersControl, String> {
+        let mut control = NvGpuFanCoolersControl::new();
+        match unsafe {
+            NvAPI_GPU_GetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
+        } {
+            0 => {
+                if control.count == 0 {
+                    return Err("No available coolers".to_string());
+                }
+
+                Ok(control)
+            },
+            i => Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
         }
     }
 
@@ -811,26 +829,12 @@ impl NvFanController for NvidiaControl {
 
     #[cfg(feature="rtx")]
     fn get_ctrl_status(&self, gpu: u32) -> Result<NVCtrlFanControlState, String> {
-
         self.check_gpu_id(gpu)?;
 
-        let mut control = NvGpuFanCoolersControl::new();
-        match unsafe {
-            NvAPI_GPU_GetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
-        } {
-            0 => {
-                if control.count == 0 {
-                    return Err("No available coolers".to_string());
-                }
-
-                match control.coolers[0].mode {
-                    NV_COOLER_CONTROL_MODE::AUTO => Ok(NVCtrlFanControlState::Auto),
-                    NV_COOLER_CONTROL_MODE::MANUAL => Ok(NVCtrlFanControlState::Manual)
-                }
-            },
-            i => Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
+        match self.get_ctrl(gpu)?.coolers[0].mode {
+            NV_COOLER_CONTROL_MODE::AUTO => Ok(NVCtrlFanControlState::Auto),
+            NV_COOLER_CONTROL_MODE::MANUAL => Ok(NVCtrlFanControlState::Manual)
         }
-
     }
 
     #[cfg(not(feature="rtx"))]
@@ -861,22 +865,9 @@ impl NvFanController for NvidiaControl {
 
     #[cfg(feature="rtx")]
     fn set_ctrl_type(&self, gpu: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
-
         self.check_gpu_id(gpu)?;
 
-        let mut control = NvGpuFanCoolersControl::new();
-        match unsafe {
-            NvAPI_GPU_GetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
-        } {
-            0 => {
-                if control.count == 0 {
-                    return Err("No available coolers".to_string());
-                }
-            },
-            i => {
-                return Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
-            }
-        }
+        let mut control = self.get_ctrl(gpu)?;
 
         // at this point `control` should be properly populated
         let count = control.count as usize;
@@ -973,7 +964,36 @@ impl NvFanController for NvidiaControl {
     }
 
     #[cfg(feature="rtx")]
-    fn set_fanspeed(&self, gpu: u32, id: u32, speed: i32) -> Result<(), String> {
+    fn set_fancontrol(&self, gpu: u32, speed: i32, typ: NVCtrlFanControlState) -> Result<(), String> {
+        self.check_gpu_id(gpu)?;
+
+        let true_speed = self.true_speed(speed);
+
+        let mut control = self.get_ctrl(gpu)?;
+
+        let policy = match typ {
+            NVCtrlFanControlState::Auto => NV_COOLER_CONTROL_MODE::AUTO,
+            NVCtrlFanControlState::Manual => NV_COOLER_CONTROL_MODE::MANUAL,
+        };
+
+        for c in 0..control.count {
+            control.coolers[c].level = true_speed.try_into().unwrap();
+            control.coolers[c].mode = policy;
+        }
+        println!("{:#?}", control);
+
+        // and set it back
+        match unsafe {
+            NvAPI_GPU_SetClientFanCoolersControl(self.handles[gpu as usize], &mut control)
+        } {
+            0 => Ok(()),
+            i => Err(format!("NvAPI_GPU_SetClientFanCoolersControl() failed; error {}", i))
+        }
+
+    }
+
+    #[cfg(feature="rtx")]
+    fn set_fanspeed(&self, gpu: u32, _id: u32, speed: i32) -> Result<(), String> {
 
         self.check_gpu_id(gpu)?;
 
@@ -1009,7 +1029,6 @@ impl NvFanController for NvidiaControl {
         }
 
     }
-
 
     fn get_version(&self) -> Result<String, String> {
         let mut b = NvAPI_ShortString::new();
