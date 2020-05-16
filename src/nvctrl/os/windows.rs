@@ -55,18 +55,6 @@ fn NVAPI_VERSION<T>(v: u32) -> u32 {
     (size | v<<16) as u32
 }
 
-/// Generates a RTX NvAPI compatible version for a specified struct type
-///
-/// **Arguments**
-///
-/// * `v` - Version number
-/// * `T` - The type of the struct that this version is generated for
-#[allow(non_snake_case)]
-fn RTX_NVAPI_VERSION<T>(v: u32) -> u32 {
-    let size: u32 = mem::size_of::<T>() as u32;
-    (size | v) + 0x10000 as u32
-}
-
 lazy_static! {
     /// Dynamic load of nvapi{64}.dll
     static ref NVAPI: Library = {
@@ -544,31 +532,22 @@ impl NvFanCoolerInfo {
 #[repr(C)]
 // #[derive(Debug)]
 struct NvGpuFanCoolersInfo {
-    version_or_size: u16,
-    new_api: u16,
-    success: u32,
+    version: u32,
+    call_success: u32,
     count: u32,
-    _reserved: [u32; 8],
-    coolers_index: [u32; NVAPI_MAX_COOLERS_PER_GPU],
-    max_rpm: u32,
+    _reserved2: [u32; 8],
+    coolers: [NvFanCoolerInfo; NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
 }
 
 impl NvGpuFanCoolersInfo {
     fn new() -> NvGpuFanCoolersInfo {
         NvGpuFanCoolersInfo {
-            // version_or_size: RTX_NVAPI_VERSION::<NvGpuFanCoolersInfo>(1u32),
-            // 0x10000 + size!
-            // MSI Afterburner does this:
-            // memset(&X,0,0x62c);
-            // X = 0x1062c;
-            // GetInfoQuery(gpu_handle,&X);
-            version_or_size: 0x62c,
-            new_api: 1,
-            success: 0,
+            version: NVAPI_VERSION::<NvGpuFanCoolersInfo>(1u32),
+            call_success: 0,
             count: 0,
-            _reserved: [0u32; 8],
-            coolers_index: [ 0; NVAPI_MAX_COOLERS_PER_GPU],
-            max_rpm: 0
+            _reserved2: [0u32; 8],
+            coolers: [ unsafe { NvFanCoolerInfo::zeroed() };
+                NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
         }
     }
 }
