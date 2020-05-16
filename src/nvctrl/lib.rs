@@ -52,6 +52,7 @@ pub trait NvFanController {
     /// * `gpu` - The GPU id
     /// * `speed` - The target speed (%)
     /// * `state` - Set the mode of fan control to either `Auto` or `Manual`
+    #[cfg(feature="rtx")]
     fn set_fancontrol(&self, gpu: u32, speed: i32, state: NVCtrlFanControlState) -> Result<(), String>;
 
     /// Returns the speed of the fan in %

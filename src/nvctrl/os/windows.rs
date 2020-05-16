@@ -1,4 +1,5 @@
 #![allow(non_upper_case_globals)]
+#![allow(dead_code)]
 
 use libloading::{Library, Symbol};
 
@@ -916,7 +917,7 @@ impl NvFanController for NvidiaControl {
         }
     }
 
-    fn get_fanspeed_rpm(&self, gpu: u32, id: u32) -> Result<i32, String> {
+    fn get_fanspeed_rpm(&self, gpu: u32, _id: u32) -> Result<i32, String> {
 
         self.check_gpu_id(gpu)?;
 
@@ -933,7 +934,7 @@ impl NvFanController for NvidiaControl {
                 NvAPI_GPU_GetClientFanCoolersStatus(self.handles[gpu as usize],
                     &mut status)
             } {
-                0 => Ok(status.coolers[id as usize].rpm.try_into().unwrap()),
+                0 => Ok(status.coolers[_id as usize].rpm.try_into().unwrap()),
                 i => Err(format!("NvAPI_GPU_GetClientFanCoolersStatus() failed; error {}", i))
             }
         }
@@ -976,7 +977,7 @@ impl NvFanController for NvidiaControl {
             NVCtrlFanControlState::Manual => NV_COOLER_CONTROL_MODE::MANUAL,
         };
 
-        for c in 0..control.count {
+        for c in 0..control.count as usize {
             control.coolers[c].level = true_speed.try_into().unwrap();
             control.coolers[c].mode = policy;
         }
