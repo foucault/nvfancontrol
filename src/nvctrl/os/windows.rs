@@ -31,6 +31,7 @@ const NVAPI_COOLER_TARGET_ALL: usize = 7;
 /// all the variants defined in `QueryCode`.
 #[allow(dead_code)]
 #[repr(u32)]
+#[allow(non_camel_case_types)]
 enum QueryCode {
     // Initialize and Unload are not in nvapi.dll? 0.o
     Initialize = 0x150E828,
@@ -42,7 +43,7 @@ enum QueryCode {
     ClientFanCoolersGetStatus = 0x35AED5E8,
     ClientFanCoolersGetControl = 0x814B209F,
     ClientFanCoolersSetControl = 0xA58971A5,
-    APISupported = 0xE5AC921F,
+    NvAPI_EnumPhysicalGPUs = 0xE5AC921F,
     Func30E40910 = 0x33C7358C,
     FuncC0E30910 = 0x593E8644,
     FuncB0E90910 = 0x9E8AF554,
@@ -1975,18 +1976,6 @@ extern {
     /// version string
     fn NvAPI_GetInterfaceVersionString(ver: *mut NvAPI_ShortString) -> libc::c_int;
 
-    /// Lists all available physical GPUS into the specified array.
-    ///
-    /// **Arguments**
-    ///
-    /// * `handles` - An array of unitialized `NvPhysicalGpuHandle`s. The size of this function is
-    /// specified by the static variable `NVAPI_MAX_PHYSICAL_GPUS`. The array will be populated
-    /// upon function call.
-    ///
-    /// * `count` - The number of available physical GPUs. These variable will be populated upon
-    /// function call.
-    fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
-
     /// Get the name of the specified GPU
     ///
     /// **Arguments**
@@ -2069,6 +2058,24 @@ unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandlePtr, usages: *mut NvGpu
     func(handle, usages)
 }
 
+/// Lists all available physical GPUS into the specified array.
+///
+/// **Arguments**
+///
+/// * `handles` - An array of unitialized `NvPhysicalGpuHandle`s. The size of this function is
+/// specified by the static variable `NVAPI_MAX_PHYSICAL_GPUS`. The array will be populated
+/// upon function call.
+///
+/// * `count` - The number of available physical GPUs. These variable will be populated upon
+/// function call.
+#[allow(non_snake_case)]
+unsafe fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int {
+    let func = mem::transmute::<
+        *const(), fn(*mut [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS], *mut u32) -> libc::c_int
+    >(NvAPI_QueryInterface(QueryCode::NvAPI_EnumPhysicalGPUs as QueryPtr));
+    func(handles, count)
+}
+
 /// Retrieves cooler information using the new client API. This is an undocumented function.
 ///
 /// **Arguments**
@@ -2138,6 +2145,7 @@ unsafe fn NvAPI_GPU_SetClientFanCoolersControl(handle: NvPhysicalGpuHandlePtr,
     >(NvAPI_QueryInterface(QueryCode::ClientFanCoolersSetControl as QueryPtr));
     func(handle, status)
 }
+
 
 /// A representation of the NvAPI_ShortString. It is an array of `c_char` with a predefined length.
 #[repr(C)]
@@ -2571,7 +2579,7 @@ impl NvidiaControl {
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
             0 => {
-                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::MaybeUninit::uninit().assume_init() };
+                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::zeroed() };
                 let mut count = 0 as u32;
                 match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
                     0 => Ok(NvidiaControl{ limits: lim,
@@ -2663,12 +2671,18 @@ impl NvFanController for NvidiaControl {
                 i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
             }
         }
-        #[cfg(feature="rtx")] {
+        #[cfg(feature = "rtx")]
+        {
             let mut info = NvGpuFanCoolersInfo::new();
             unsafe {
                 NvAPI_GPU_GetClientFanCoolersInfo(self.handles[gpu as usize], &mut info);
             }
             // JUST FOR LOOKING AT THE DATA IN A DEBUGGER
+
+            let mut control = NvGpuFanCoolersControl::new();
+            unsafe {
+                NvAPI_GPU_GetClientFanCoolersControl(self.handles[gpu as usize], &mut control);
+            }
 
             let mut status  = NvGpuFanCoolersStatus::new();
             match unsafe {
