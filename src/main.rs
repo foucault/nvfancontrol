@@ -72,14 +72,17 @@ struct NVFanManager {
     curve: FanspeedCurve,
     on_time: Option<f64>,
     force: bool,
+    monitor: bool,
     fanflicker: Option<FanFlickerFix>,
 }
 
 impl Drop for NVFanManager {
 
     fn drop(&mut self) {
-        debug!("Resetting fan control");
-        self.reset_fan().unwrap();
+        if !self.monitor {
+            debug!("Resetting fan control");
+            self.reset_fan().unwrap();
+        }
     }
 
 }
@@ -89,6 +92,7 @@ impl NVFanManager {
         gpu: u32,
         curve: FanspeedCurve,
         force: bool,
+        monitor: bool,
         limits: Option<(u16, u16)>,
         fanflickerrange: Option<FanFlickerRange>,
     ) -> Result<NVFanManager, String> {
@@ -113,6 +117,7 @@ impl NVFanManager {
             curve: curve,
             on_time: None,
             force: force,
+            monitor: monitor,
             fanflicker: match fanflickerrange {
                 Some(range) => {
                     let prev = (range.fickering_starts as i32).max(ctrl.get_fanspeed(0, gpu)?);
@@ -141,6 +146,10 @@ impl NVFanManager {
     }
 
     fn update(&mut self) -> Result<(), String> {
+
+        if self.monitor {
+            return Ok(())
+        }
 
         let temp = self.ctrl.get_temp(self.gpu)? as u16;
         let ctrl_status = self.ctrl.get_ctrl_status(self.gpu)?;
@@ -667,7 +676,9 @@ pub fn main() {
         None => None,
     };
 
-    let mut mgr = match NVFanManager::new(gpu, curve, force_update, limits, fanflickerrange) {
+    let monitor_only = matches.opt_present("m");
+
+    let mut mgr = match NVFanManager::new(gpu, curve, force_update, monitor_only, limits, fanflickerrange) {
         Ok(m) => m,
         Err(s) => {
             error!("{}", s);
@@ -695,7 +706,6 @@ pub fn main() {
     let timeout = Duration::new(2, 0);
     RUNNING.store(true, Ordering::Relaxed);
 
-    let monitor_only = matches.opt_present("m");
     if monitor_only {
         info!("Option \"-m\" is present; curve will have no actual effect");
     }
@@ -735,11 +745,9 @@ pub fn main() {
             break;
         }
 
-        if !monitor_only {
-            if let Err(e) = mgr.update() {
-                error!("Could not update fan speed: {}", e)
-            };
-        }
+        if let Err(e) = mgr.update() {
+            error!("Could not update fan speed: {}", e)
+        };
 
         let mut raw_data = data.write().unwrap();
         let since_epoch: time::Duration =
