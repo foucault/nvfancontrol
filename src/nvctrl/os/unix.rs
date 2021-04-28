@@ -91,6 +91,13 @@ extern {
     /// * `dpy` - The `Display` to close
     fn XCloseDisplay(dpy: *const Display);
 
+    /// Get the number of X Screens
+    ///
+    /// ** Arguments**
+    ///
+    /// * `dpy` - The `Display` to count screens for
+    fn XScreenCount(dpy: *const Display) -> c_int;
+
     /// XNVCtrl generic int query
     ///
     /// **Arguments**
@@ -181,6 +188,15 @@ extern {
     fn XNVCTRLQueryTargetBinaryData(dpy: *const Display, target: CTRL_TARGET,
                                     id: c_int, mask: c_uint, attribute: BIN_ATTR,
                                     data: *const *mut c_uchar, len: *mut c_int) -> c_int;
+
+    /// XNVCtrl check if screen is controlled by the NVIDIA driver
+    ///
+    /// **Arugments**
+    ///
+    /// * `dpy` - The current X11 `Display`
+    /// * `screen` - The XScreen to check
+    ///
+    fn XNVCTRLIsNvScreen(dpy: *const Display, screen: c_int) -> c_int;
 }
 
 #[allow(dead_code)]
@@ -406,9 +422,29 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_version(&self) -> Result<String, String> {
+
+        let num_screens = unsafe { XScreenCount(self.dpy) };
+
+        if num_screens <= 0 {
+            return Err("XScreenCount failed; no screens available".to_string());
+        }
+
+        let mut nv_screen = -1;
+
+        for i in 0..num_screens {
+            if unsafe { XNVCTRLIsNvScreen(self.dpy, i) == 1 } {
+                nv_screen = i;
+                break
+            }
+        }
+
+        if nv_screen < 0 {
+            return Err("XNVCTRLIsNvScreen failed; no screens assigned to the NVidia driver".to_string());
+        }
+
         let v: *mut c_char = unsafe { mem::uninitialized() };
         match unsafe {
-            XNVCTRLQueryStringAttribute(self.dpy, 0, 0, CTRL_ATTR::NVIDIA_DRIVER_VERSION, &v)
+            XNVCTRLQueryStringAttribute(self.dpy, nv_screen, 0, CTRL_ATTR::NVIDIA_DRIVER_VERSION, &v)
         } {
             XNV_OK => {
                 assert!(!v.is_null());
