@@ -83,6 +83,28 @@ following
 The important bit is the `Coolbits` option. Valid Coolbits values for dynamic
 fan control are `4`, `5` and `12`. A sample configuration file is provided.
 
+### Run X11 as root
+
+As of version 465 NVIDIA decided that is a security risk for non-root users
+to have access to cooler control and overclocking capabilities. So you will
+have to start X11 as root despite almost no distributions and desktop
+environment doing so for the past years because it is a massive... security
+risk. Trading one security risk for another! To start X11 as root you
+will have to add this to your `/etc/X11/Xwrapper.config` (create the file if
+it doesn't exist).
+
+```
+allowed_users=anybody
+needs_root_rights=yes
+```
+
+Depending on how your distribution packages X11 you might have to setuid
+`/usr/lib/Xorg.wrap` as well. You can do so by running
+
+```
+sudo chmod u+s /usr/lib/Xorg.wrap
+```
+
 ### Use and configure
 
 To run the program just execute the `nvfancontrol` binary. Add the `-d` or
