@@ -1,21 +1,21 @@
 extern crate nvctrl;
 use nvctrl::{NvFanController, NvidiaControl, NVCtrlFanControlState};
 
-#[macro_use] extern crate log;
+#[macro_use]extern crate log;
 use log::{Log, Record, LevelFilter, Metadata};
 
 extern crate getopts;
 use getopts::Options;
 
-#[cfg(windows)] extern crate ctrlc;
-#[cfg(unix)] extern crate nix;
-#[cfg(unix)] use nix::sys::signal;
-#[cfg(unix)] use std::ffi::OsString;
+#[cfg(windows)]extern crate ctrlc;
+#[cfg(unix)]extern crate nix;
+#[cfg(unix)]use nix::sys::signal;
+#[cfg(unix)]use std::ffi::OsString;
 
 extern crate time;
 extern crate dirs;
 
-#[macro_use] extern crate serde_derive;
+#[macro_use]extern crate serde_derive;
 
 use std::env;
 use std::thread;
@@ -131,7 +131,12 @@ impl NVFanManager {
         Ok(ret)
     }
 
-    fn set_fans(&self, speed: i32) -> Result<(), String> {
+    fn set_manual_fan_speed(&self, speed: i32) -> Result<(), String> {
+        if self.ctrl.is_rtx(self.gpu)? {
+            self.ctrl.set_fancontrol(self.gpu, speed, NVCtrlFanControlState::Manual)?;
+            return Ok(())
+        }
+
         self.ctrl.set_ctrl_type(self.gpu, NVCtrlFanControlState::Manual)?;
         let coolers = &*self.ctrl.gpu_coolers(self.gpu)?;
         for c in coolers {
@@ -174,14 +179,14 @@ impl NVFanManager {
         let speed = self.curve.speed_y(temp);
 
         match (speed, self.on_time, &mut self.fanflicker) {
-            (Some(y), _, None) => {
+            (Some(speed), _, None) => {
                 let since_epoch: time::Duration =
-                    time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+                    time::OffsetDateTime::now_utc() - time::OffsetDateTime::unix_epoch();
                 self.on_time = Some(since_epoch.as_seconds_f64());
-                self.set_fans(y)
+                self.set_manual_fan_speed(speed)
             },
             (None, Some(t), None) => {
-                let since_epoch: time::Duration = time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
+                let since_epoch: time::Duration = time::OffsetDateTime::now_utc() - time::OffsetDateTime::unix_epoch();
                 let now = since_epoch.as_seconds_f64();
                 let diff = now - t;
 
@@ -190,7 +195,7 @@ impl NVFanManager {
                 // if utilization can't be retrieved the utilization leg is
                 // always false and ignored
                 if diff < 240.0 || gutil.unwrap_or(&-1) > &25 {
-                    self.set_fans(self.curve.minspeed())
+                    self.set_manual_fan_speed(self.curve.minspeed())
                 } else {
                     debug!("Grace period expired; turning fan off");
                     self.on_time = None;
@@ -202,9 +207,9 @@ impl NVFanManager {
                 self.on_time = None;
                 self.reset_fan()
             },
-            (Some(y), _, Some(fff)) => {
-                let y = fff.fix_speed(rpm, y);
-                self.set_fans(y)
+            (Some(speed), _, Some(fff)) => {
+                let speed = fff.fix_speed(rpm, speed);
+                self.set_manual_fan_speed(speed)
             },
             (None, _, Some(fff)) => {
                 // The jump from 0 to some RPM (presumably in the flicker range) will
@@ -212,7 +217,7 @@ impl NVFanManager {
                 // it at the lowest speed.
                 debug!("FanFlickerFix: preventing fan-off");
                 let new_speed = fff.fix_speed(rpm, fff.minimum());
-                self.set_fans(new_speed)
+                self.set_manual_fan_speed(new_speed)
             },
         }
     }
@@ -474,7 +479,10 @@ fn list_gpus_and_coolers() -> Result<(), String> {
 }
 
 fn make_default_curve(gpu: u32) -> Vec<(u16, u16)> {
-    let conf = DEFAULT_CONFIG.replace("{}", &gpu.to_string());
+    let mut conf = String::from("");
+    for i in 0..gpu+1 {
+        conf = conf + &(DEFAULT_CONFIG.replace("{}", &i.to_string()));
+    }
     let c = config::from_string(&conf).unwrap();
     debug!("Default configuration loaded");
     debug!("{}", conf.trim());
@@ -712,7 +720,7 @@ pub fn main() {
 
     let json_output = matches.opt_present("j");
 
-    let data = Arc::new(RwLock::new(GPUData::new(&mgr, 0).unwrap()));
+    let data = Arc::new(RwLock::new(GPUData::new(&mgr, gpu).unwrap()));
 
     let server_port = if matches.opt_present("t") {
         let srv_data = data.clone();
@@ -751,13 +759,13 @@ pub fn main() {
 
         let mut raw_data = data.write().unwrap();
         let since_epoch: time::Duration =
-                time::OffsetDateTime::now() - time::OffsetDateTime::unix_epoch();
-        (*raw_data).update_from_mgr(since_epoch.whole_seconds(), &mgr, 0);
+                time::OffsetDateTime::now_utc() - time::OffsetDateTime::unix_epoch();
+        (*raw_data).update_from_mgr(since_epoch.whole_seconds(), &mgr, gpu);
         drop(raw_data);
 
         let raw_data = data.read().unwrap();
-        debug!("Temp: {}; Speed: {:?} RPM ({:?}%); Load: {}%; Mode: {}",
-            raw_data.temp, raw_data.rpm, raw_data.speed, raw_data.load,
+        debug!("GPU #{} Temp: {}; Speed: {:?} RPM ({:?}%); Load: {}%; Mode: {}",
+            gpu, raw_data.temp, raw_data.rpm, raw_data.speed, raw_data.load,
             match raw_data.mode {
                 Some(NVCtrlFanControlState::Auto) => "Auto",
                 Some(NVCtrlFanControlState::Manual) => "Manual",

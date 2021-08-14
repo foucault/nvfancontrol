@@ -30,6 +30,13 @@ pub trait NvFanController {
     /// * `gpu` - The GPU id
     fn get_temp(&self, gpu: u32) -> Result<i32, String>;
 
+    /// Returns wether the GPU uses the nex RTX NvAPI Calls
+    ///
+    /// **Arguments**
+    ///
+    /// * `gpu` - The GPU id
+    fn is_rtx(&self, gpu: u32) -> Result<bool, String>;
+
     /// Returns the control status of the cooler
     ///
     /// **Arguments**
@@ -44,6 +51,15 @@ pub trait NvFanController {
     /// * `gpu` - The GPU id
     /// * `state` - Set the mode of fan control to either `Auto` or `Manual`
     fn set_ctrl_type(&self, gpu: u32, state: NVCtrlFanControlState) -> Result<(), String>;
+
+    /// Sets the control status and fanspeeed of the cooler
+    ///
+    /// **Arguments**
+    ///
+    /// * `gpu` - The GPU id
+    /// * `speed` - The target speed (%)
+    /// * `state` - Set the mode of fan control to either `Auto` or `Manual`
+    fn set_fancontrol(&self, gpu: u32, speed: i32, state: NVCtrlFanControlState) -> Result<(), String>;
 
     /// Returns the speed of the fan in %
     ///

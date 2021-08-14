@@ -223,7 +223,7 @@ impl NvidiaControl {
 
             for i in 0..gpu_count {
                 let mut len = -1 as i32;
-                let v: *mut c_uchar = unsafe { mem::uninitialized() };
+                let v: *mut c_uchar = unsafe { mem::MaybeUninit::uninit().assume_init() };
 
                 match unsafe {
                     XNVCTRLQueryTargetBinaryData(dpy, CTRL_TARGET::GPU, i, 0,
@@ -364,6 +364,14 @@ impl NvFanController for NvidiaControl {
         }
     }
 
+    fn set_fancontrol(&self, gpu: u32, speed: i32, state: NVCtrlFanControlState) -> Result<(), String> {
+        for id in self.gpu_coolers(gpu)?.iter() {
+            self.set_fanspeed(gpu , *id, speed)?;
+        }
+        self.set_ctrl_type(gpu, state)?;
+        Ok(())
+    }
+
     fn get_fanspeed(&self, _: u32, id: u32) -> Result<i32, String> {
 
         self.check_fan_id(id)?;
@@ -406,7 +414,7 @@ impl NvFanController for NvidiaControl {
     }
 
     fn get_version(&self) -> Result<String, String> {
-        let v: *mut c_char = unsafe { mem::uninitialized() };
+        let v: *mut c_char = unsafe { mem::MaybeUninit::uninit().assume_init() };
         match unsafe {
             XNVCTRLQueryStringAttribute(self.dpy, 0, 0, CTRL_ATTR::NVIDIA_DRIVER_VERSION, &v)
         } {
@@ -422,7 +430,7 @@ impl NvFanController for NvidiaControl {
 
         self.check_gpu_id(id)?;
 
-        let v: *mut c_char = unsafe { mem::uninitialized() };
+        let v: *mut c_char = unsafe { mem::MaybeUninit::uninit().assume_init() };
         match unsafe {
             XNVCTRLQueryTargetStringAttribute(self.dpy, CTRL_TARGET::GPU, id as i32,
                                               0, CTRL_ATTR::PRODUCT_NAME, &v)
@@ -439,7 +447,7 @@ impl NvFanController for NvidiaControl {
 
         self.check_gpu_id(id)?;
 
-        let v: *mut c_char = unsafe { mem::uninitialized() };
+        let v: *mut c_char = unsafe { mem::MaybeUninit::uninit().assume_init() };
         match unsafe {
             XNVCTRLQueryTargetStringAttribute(self.dpy, CTRL_TARGET::GPU, 0, 0,
                                               CTRL_ATTR::UTILIZATION, &v)
