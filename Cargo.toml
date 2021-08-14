@@ -24,4 +24,3 @@ path = "src/nvctrl"
 
 [features]
 dynamic-xnvctrl = ["nvctrl/dynamic-xnvctrl"]
-rtx = ["nvctrl/rtx"]
