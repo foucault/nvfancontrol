@@ -132,6 +132,7 @@ impl NVFanManager {
     }
 
     fn set_manual_fan_speed(&self, speed: i32) -> Result<(), String> {
+        #[cfg(target_os="windows")]
         if self.ctrl.is_rtx(self.gpu)? {
             self.ctrl.set_fancontrol(self.gpu, speed, NVCtrlFanControlState::Manual)?;
             return Ok(())

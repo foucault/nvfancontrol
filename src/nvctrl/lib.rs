@@ -30,11 +30,14 @@ pub trait NvFanController {
     /// * `gpu` - The GPU id
     fn get_temp(&self, gpu: u32) -> Result<i32, String>;
 
-    /// Returns wether the GPU uses the nex RTX NvAPI Calls
+    /// Returns wether the GPU uses the nex RTX NvAPI Calls. This
+    /// is only relevant in windows as on Linux there is no distinction
+    /// between card types; they are all treated equally
     ///
     /// **Arguments**
     ///
     /// * `gpu` - The GPU id
+    #[cfg(target_os="windows")]
     fn is_rtx(&self, gpu: u32) -> Result<bool, String>;
 
     /// Returns the control status of the cooler
