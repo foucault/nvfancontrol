@@ -701,6 +701,19 @@ pub fn main() {
     for i in 0u32..gpu_count {
         info!("NVIDIA graphics adapter #{}: {}", i,
               mgr.ctrl.get_adapter(i).unwrap());
+
+        #[cfg(target_os="windows")]
+        match mgr.ctrl.is_rtx(i) {
+            Ok(rtx) => {
+                if rtx {
+                    info!(" Adapter #{} is an RTX card; using newer NVAPI calls", i)
+                }
+            },
+            Err(err) => {
+                error!(" Could not determine if adapter #{} is an RTX card: {}", i, err)
+            }
+        }
+
         match mgr.ctrl.gpu_coolers(i) {
             Ok(array) => {
                 info!("  GPU #{} coolers: {}", i,
