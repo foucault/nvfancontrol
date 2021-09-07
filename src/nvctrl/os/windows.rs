@@ -2,12 +2,12 @@
 
 use libloading::{Library, Symbol};
 
-use std::ffi::CStr;
-use std::mem;
+use libc;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
-use libc;
+use std::ffi::CStr;
+use std::mem;
 use ::{NVCtrlFanControlState, NvFanController};
 
 const NVAPI_SHORT_STRING_MAX: usize = 64;
@@ -18,11 +18,15 @@ const NVAPI_CLIENT_MAX_COOLERS_PER_GPU: usize = 32;
 const NVAPI_MAX_USAGES_PER_GPU: usize = 33;
 const NVAPI_COOLER_TARGET_ALL: usize = 7;
 
-#[cfg(target_arch="x86")] type QueryPtr = u32;
-#[cfg(target_arch="x86")] const NVAPI_DLL: &'static str = "nvapi.dll";
+#[cfg(target_arch = "x86")]
+type QueryPtr = u32;
+#[cfg(target_arch = "x86")]
+const NVAPI_DLL: &'static str = "nvapi.dll";
 
-#[cfg(target_arch="x86_64")] type QueryPtr = u64;
-#[cfg(target_arch="x86_64")] const NVAPI_DLL: &'static str = "nvapi64.dll";
+#[cfg(target_arch = "x86_64")]
+type QueryPtr = u64;
+#[cfg(target_arch = "x86_64")]
+const NVAPI_DLL: &'static str = "nvapi64.dll";
 
 /// Query codes for NvAPI functions hidden from the public API. This is used
 /// in conjuction with `NvAPI_QueryInterface`. There are implementations for
@@ -38,7 +42,7 @@ enum QueryCode {
     ClientFanCoolersGetInfo = 0xFB85B01E,
     ClientFanCoolersGetStatus = 0x35AED5E8,
     ClientFanCoolersGetControl = 0x814B209F,
-    ClientFanCoolersSetControl = 0xA58971A5
+    ClientFanCoolersSetControl = 0xA58971A5,
 }
 
 /// Generates a NvAPI compatible version for a specified struct type
@@ -50,7 +54,7 @@ enum QueryCode {
 #[allow(non_snake_case)]
 fn NVAPI_VERSION<T>(v: u32) -> u32 {
     let size: u32 = mem::size_of::<T>() as u32;
-    (size | v<<16) as u32
+    (size | v << 16) as u32
 }
 
 lazy_static! {
@@ -69,9 +73,9 @@ lazy_static! {
 /// All these functions return a status code upon call. There are wrappers for all these function
 /// through the `NvFanController` trait and are part of the documented NVAPI spec.
 #[allow(dead_code)]
-#[cfg_attr(target_arch="x86", link(name="nvapi", kind="static"))]
-#[cfg_attr(target_arch="x86_64", link(name="nvapi64", kind="static"))]
-extern {
+#[cfg_attr(target_arch = "x86", link(name = "nvapi", kind = "static"))]
+#[cfg_attr(target_arch = "x86_64", link(name = "nvapi64", kind = "static"))]
+extern "C" {
     /// Initialises NvAPI.
     fn NvAPI_Initialize() -> libc::c_int;
 
@@ -96,7 +100,10 @@ extern {
     ///
     /// * `count` - The number of available physical GPUs. These variable will be populated upon
     /// function call.
-    fn NvAPI_EnumPhysicalGPUs(handles: *mut [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS], count: *mut u32) -> libc::c_int;
+    fn NvAPI_EnumPhysicalGPUs(
+        handles: *mut [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS],
+        count: *mut u32,
+    ) -> libc::c_int;
 
     /// Get the name of the specified GPU
     ///
@@ -105,7 +112,10 @@ extern {
     /// * `handle` - The GPU for which the name is requested
     /// * `name` - A pointer to an `NvAPI_ShortString` that will be populated with the adapter name
     /// upon function call.
-    fn NvAPI_GPU_GetFullName(handle: NvPhysicalGpuHandlePtr, name: *mut NvAPI_ShortString) -> libc::c_int;
+    fn NvAPI_GPU_GetFullName(
+        handle: NvPhysicalGpuHandlePtr,
+        name: *mut NvAPI_ShortString,
+    ) -> libc::c_int;
 
     /// Returns the fan speed in RPM
     ///
@@ -122,7 +132,11 @@ extern {
     /// * `handle` - The GPU for which the thermal settings are requested.
     /// * `index` - The sensor index
     /// * `settings` - The thermal settings struct; it will be populated upon function call
-    fn NvAPI_GPU_GetThermalSettings(handle: NvPhysicalGpuHandlePtr, index: u32, settings: *mut NV_GPU_THERMAL_SETTINGS_V2) -> libc::c_int;
+    fn NvAPI_GPU_GetThermalSettings(
+        handle: NvPhysicalGpuHandlePtr,
+        index: u32,
+        settings: *mut NV_GPU_THERMAL_SETTINGS_V2,
+    ) -> libc::c_int;
 
     /// Returns the NVidia driver version
     ///
@@ -130,7 +144,10 @@ extern {
     ///
     /// * `driverVersion` - The driver version number; it will be populated upon function call
     /// * `branch` - The driver version branch; it will be populated upon function call
-    fn NvAPI_SYS_GetDriverAndBranchVersion(driverVersion: *mut u32, branch: *mut NvAPI_ShortString) -> libc::c_int;
+    fn NvAPI_SYS_GetDriverAndBranchVersion(
+        driverVersion: *mut u32,
+        branch: *mut NvAPI_ShortString,
+    ) -> libc::c_int;
 }
 
 /// Sets the cooler level for the specified GPU. This is an undocumented function.
@@ -141,9 +158,14 @@ extern {
 /// * `index` - The cooler index
 /// * `levels` - The cooler levels for the specified GPU
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandlePtr, index: u32, levels: *const NvGpuCoolerLevels) -> libc::c_int {
+unsafe fn NvAPI_GPU_SetCoolerLevels(
+    handle: NvPhysicalGpuHandlePtr,
+    index: u32,
+    levels: *const NvGpuCoolerLevels,
+) -> libc::c_int {
     let func = mem::transmute::<
-        *const (), fn(NvPhysicalGpuHandlePtr, u32, *const NvGpuCoolerLevels) -> libc::c_int
+        *const (),
+        fn(NvPhysicalGpuHandlePtr, u32, *const NvGpuCoolerLevels) -> libc::c_int,
     >(NvAPI_QueryInterface(QueryCode::SetCoolerLevels as QueryPtr));
     func(handle, index, levels)
 }
@@ -158,10 +180,17 @@ unsafe fn NvAPI_GPU_SetCoolerLevels(handle: NvPhysicalGpuHandlePtr, index: u32, 
 /// * `settings` - The `NvGpuCoolerSettings` containing the requested information; it will be
 /// populated upon function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandlePtr, index: u32, settings: *mut NvGpuCoolerSettings) -> libc::c_int {
+unsafe fn NvAPI_GPU_GetCoolerSettings(
+    handle: NvPhysicalGpuHandlePtr,
+    index: u32,
+    settings: *mut NvGpuCoolerSettings,
+) -> libc::c_int {
     let func = mem::transmute::<
-        *const (), fn(NvPhysicalGpuHandlePtr, u32, *mut NvGpuCoolerSettings) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::GetCoolerSettings as QueryPtr));
+        *const (),
+        fn(NvPhysicalGpuHandlePtr, u32, *mut NvGpuCoolerSettings) -> libc::c_int,
+    >(NvAPI_QueryInterface(
+        QueryCode::GetCoolerSettings as QueryPtr,
+    ));
     func(handle, index, settings)
 }
 
@@ -173,9 +202,13 @@ unsafe fn NvAPI_GPU_GetCoolerSettings(handle: NvPhysicalGpuHandlePtr, index: u32
 /// * `usages` - The `NvGpuUsages` containing the requested information; it will be populated upon
 /// function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandlePtr, usages: *mut NvGpuUsages) -> libc::c_int {
+unsafe fn NvAPI_GPU_GetUsages(
+    handle: NvPhysicalGpuHandlePtr,
+    usages: *mut NvGpuUsages,
+) -> libc::c_int {
     let func = mem::transmute::<
-        *const (), fn(NvPhysicalGpuHandlePtr, *mut NvGpuUsages) -> libc::c_int
+        *const (),
+        fn(NvPhysicalGpuHandlePtr, *mut NvGpuUsages) -> libc::c_int,
     >(NvAPI_QueryInterface(QueryCode::GetUsages as QueryPtr));
     func(handle, usages)
 }
@@ -188,12 +221,16 @@ unsafe fn NvAPI_GPU_GetUsages(handle: NvPhysicalGpuHandlePtr, usages: *mut NvGpu
 /// * `usages` - The `NvGpuFanCoolersInfo` containing the requested information; it will be
 /// populated upon function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_GetClientFanCoolersInfo(handle: NvPhysicalGpuHandlePtr,
-    infos: *mut NvGpuFanCoolersInfo) -> libc::c_int {
-
+unsafe fn NvAPI_GPU_GetClientFanCoolersInfo(
+    handle: NvPhysicalGpuHandlePtr,
+    infos: *mut NvGpuFanCoolersInfo,
+) -> libc::c_int {
     let func = mem::transmute::<
-        *const(), fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersInfo) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::ClientFanCoolersGetInfo as QueryPtr));
+        *const (),
+        fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersInfo) -> libc::c_int,
+    >(NvAPI_QueryInterface(
+        QueryCode::ClientFanCoolersGetInfo as QueryPtr,
+    ));
     func(handle, infos)
 }
 
@@ -205,12 +242,16 @@ unsafe fn NvAPI_GPU_GetClientFanCoolersInfo(handle: NvPhysicalGpuHandlePtr,
 /// * `usages` - The `NvGpuFanCoolersStatus` containing the requested information; it
 /// will be populated upon function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_GetClientFanCoolersStatus(handle: NvPhysicalGpuHandlePtr,
-    status: *mut NvGpuFanCoolersStatus) -> libc::c_int {
-
+unsafe fn NvAPI_GPU_GetClientFanCoolersStatus(
+    handle: NvPhysicalGpuHandlePtr,
+    status: *mut NvGpuFanCoolersStatus,
+) -> libc::c_int {
     let func = mem::transmute::<
-        *const(), fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersStatus) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::ClientFanCoolersGetStatus as QueryPtr));
+        *const (),
+        fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersStatus) -> libc::c_int,
+    >(NvAPI_QueryInterface(
+        QueryCode::ClientFanCoolersGetStatus as QueryPtr,
+    ));
     func(handle, status)
 }
 
@@ -223,12 +264,16 @@ unsafe fn NvAPI_GPU_GetClientFanCoolersStatus(handle: NvPhysicalGpuHandlePtr,
 /// * `usages` - The `NvGpuFanCoolersStatus` containing the requested information; it
 /// will be populated upon function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_GetClientFanCoolersControl(handle: NvPhysicalGpuHandlePtr,
-    status: *mut NvGpuFanCoolersControl) -> libc::c_int {
-
+unsafe fn NvAPI_GPU_GetClientFanCoolersControl(
+    handle: NvPhysicalGpuHandlePtr,
+    status: *mut NvGpuFanCoolersControl,
+) -> libc::c_int {
     let func = mem::transmute::<
-        *const(), fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersControl) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::ClientFanCoolersGetControl as QueryPtr));
+        *const (),
+        fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersControl) -> libc::c_int,
+    >(NvAPI_QueryInterface(
+        QueryCode::ClientFanCoolersGetControl as QueryPtr,
+    ));
     func(handle, status)
 }
 
@@ -241,38 +286,51 @@ unsafe fn NvAPI_GPU_GetClientFanCoolersControl(handle: NvPhysicalGpuHandlePtr,
 /// * `usages` - The `NvGpuFanCoolersStatus` containing the requested information; it
 /// will be populated upon function call
 #[allow(non_snake_case)]
-unsafe fn NvAPI_GPU_SetClientFanCoolersControl(handle: NvPhysicalGpuHandlePtr,
-    status: *mut NvGpuFanCoolersControl) -> libc::c_int {
-
+unsafe fn NvAPI_GPU_SetClientFanCoolersControl(
+    handle: NvPhysicalGpuHandlePtr,
+    status: *mut NvGpuFanCoolersControl,
+) -> libc::c_int {
     let func = mem::transmute::<
-        *const(), fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersControl) -> libc::c_int
-    >(NvAPI_QueryInterface(QueryCode::ClientFanCoolersSetControl as QueryPtr));
+        *const (),
+        fn(NvPhysicalGpuHandlePtr, *mut NvGpuFanCoolersControl) -> libc::c_int,
+    >(NvAPI_QueryInterface(
+        QueryCode::ClientFanCoolersSetControl as QueryPtr,
+    ));
     func(handle, status)
 }
 
 /// A representation of the NvAPI_ShortString. It is an array of `c_char` with a predefined length.
 #[repr(C)]
 struct NvAPI_ShortString {
-    inner: [libc::c_char; NVAPI_SHORT_STRING_MAX]
+    inner: [libc::c_char; NVAPI_SHORT_STRING_MAX],
 }
 
 impl NvAPI_ShortString {
     /// Create an empty `NvAPI_ShortString` consisting entirely of \0
     fn new() -> NvAPI_ShortString {
-        NvAPI_ShortString { inner: [0 as libc::c_char; NVAPI_SHORT_STRING_MAX] }
+        NvAPI_ShortString {
+            inner: [0 as libc::c_char; NVAPI_SHORT_STRING_MAX],
+        }
     }
 
     /// Returns a `String` representation of this `NvAPI_ShortString`. This copied data
     /// in order to be useful.
     fn to_string(&self) -> String {
-        unsafe { CStr::from_ptr(self.inner.as_ptr()).to_str().unwrap().to_owned() }
+        unsafe {
+            CStr::from_ptr(self.inner.as_ptr())
+                .to_str()
+                .unwrap()
+                .to_owned()
+        }
     }
 }
 
 /// A GPU handle.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-struct NvPhysicalGpuHandle { unused: libc::c_int }
+struct NvPhysicalGpuHandle {
+    unused: libc::c_int,
+}
 type NvPhysicalGpuHandlePtr = *mut NvPhysicalGpuHandle;
 
 #[repr(C)]
@@ -291,23 +349,23 @@ enum NV_THERMAL_CONTROLLER {
     SBMAX6649,
     VBIOSEVT,
     OS,
-    UNKNOWN = -1
+    UNKNOWN = -1,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 #[allow(dead_code, non_camel_case_types)]
 enum NV_THERMAL_TARGET {
-    NONE          = 0,
-    GPU           = 1,
-    MEMORY        = 2,
-    POWER_SUPPLY  = 4,
-    BOARD         = 8,
-    VCD_BOARD     = 9,
-    VCD_INLET     = 10,
-    VCD_OUTLET    = 11,
-    ALL           = 15,
-    UNKNOWN       = -1,
+    NONE = 0,
+    GPU = 1,
+    MEMORY = 2,
+    POWER_SUPPLY = 4,
+    BOARD = 8,
+    VCD_BOARD = 9,
+    VCD_INLET = 10,
+    VCD_OUTLET = 11,
+    ALL = 15,
+    UNKNOWN = -1,
 }
 
 /// A representation of a thermal sensor
@@ -318,7 +376,7 @@ struct NvThermalSensor {
     default_min_temp: i32,
     default_max_temp: i32,
     current_temp: i32,
-    target: NV_THERMAL_TARGET
+    target: NV_THERMAL_TARGET,
 }
 
 impl NvThermalSensor {
@@ -330,7 +388,7 @@ impl NvThermalSensor {
             default_min_temp: -1,
             default_max_temp: -1,
             current_temp: -1,
-            target: NV_THERMAL_TARGET::UNKNOWN
+            target: NV_THERMAL_TARGET::UNKNOWN,
         }
     }
 }
@@ -344,7 +402,7 @@ struct NV_GPU_THERMAL_SETTINGS_V2 {
     /// Number of available sensors
     count: u32,
     /// A list of all the available sensors
-    sensors: [NvThermalSensor; NVAPI_MAX_THERMAL_SENSORS_PER_GPU]
+    sensors: [NvThermalSensor; NVAPI_MAX_THERMAL_SENSORS_PER_GPU],
 }
 
 impl NV_GPU_THERMAL_SETTINGS_V2 {
@@ -354,7 +412,7 @@ impl NV_GPU_THERMAL_SETTINGS_V2 {
         NV_GPU_THERMAL_SETTINGS_V2 {
             version: NVAPI_VERSION::<NV_GPU_THERMAL_SETTINGS_V2>(2u32),
             count: 0,
-            sensors: [NvThermalSensor::new(); NVAPI_MAX_THERMAL_SENSORS_PER_GPU]
+            sensors: [NvThermalSensor::new(); NVAPI_MAX_THERMAL_SENSORS_PER_GPU],
         }
     }
 
@@ -389,7 +447,6 @@ enum NV_COOLER_POLICY {
     DEFAULT = 32,
 }
 
-
 /// Cooler control mode (client API)
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -400,7 +457,6 @@ enum NV_COOLER_CONTROL_MODE {
     MANUAL = 1,
 }
 
-
 /// The level (in %) for a GPU cooler
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -409,7 +465,7 @@ struct NvLevel {
     /// The level value
     level: i32,
     /// The associated policy
-    policy: NV_COOLER_POLICY
+    policy: NV_COOLER_POLICY,
 }
 
 /// Cooler levels for each cooler in the GPU
@@ -418,7 +474,7 @@ struct NvLevel {
 struct NvGpuCoolerLevels {
     /// Struct version
     version: u32,
-    coolers: [NvLevel; NVAPI_MAX_COOLERS_PER_GPU]
+    coolers: [NvLevel; NVAPI_MAX_COOLERS_PER_GPU],
 }
 
 impl NvGpuCoolerLevels {
@@ -426,8 +482,10 @@ impl NvGpuCoolerLevels {
     fn new() -> NvGpuCoolerLevels {
         NvGpuCoolerLevels {
             version: NVAPI_VERSION::<NvGpuCoolerLevels>(1u32),
-            coolers: [NvLevel { level: -1, policy: NV_COOLER_POLICY::NONE };
-                        NVAPI_MAX_COOLERS_PER_GPU]
+            coolers: [NvLevel {
+                level: -1,
+                policy: NV_COOLER_POLICY::NONE,
+            }; NVAPI_MAX_COOLERS_PER_GPU],
         }
     }
 
@@ -495,7 +553,7 @@ struct NvGpuCoolerSettings {
     /// Number of available coolers
     count: u32,
     /// All `NvCooler`s
-    coolers: [NvCooler; NVAPI_MAX_COOLERS_PER_GPU]
+    coolers: [NvCooler; NVAPI_MAX_COOLERS_PER_GPU],
 }
 
 impl NvGpuCoolerSettings {
@@ -504,7 +562,7 @@ impl NvGpuCoolerSettings {
         NvGpuCoolerSettings {
             version: NVAPI_VERSION::<NvGpuCoolerSettings>(1u32),
             count: 0,
-            coolers: [unsafe { NvCooler::zeroed() }; NVAPI_MAX_COOLERS_PER_GPU]
+            coolers: [unsafe { NvCooler::zeroed() }; NVAPI_MAX_COOLERS_PER_GPU],
         }
     }
 }
@@ -517,7 +575,7 @@ struct NvFanCoolerInfo {
     _reserved1: u32,
     _reserved2: u32,
     max_rpm: u32,
-    _reserved3: [u32; 8]
+    _reserved3: [u32; 8],
 }
 
 impl NvFanCoolerInfo {
@@ -533,7 +591,7 @@ struct NvGpuFanCoolersInfo {
     _reserved1: u32,
     count: u32,
     _reserved2: [u32; 8],
-    coolers: [NvFanCoolerInfo; NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
+    coolers: [NvFanCoolerInfo; NVAPI_CLIENT_MAX_COOLERS_PER_GPU],
 }
 
 impl NvGpuFanCoolersInfo {
@@ -543,8 +601,7 @@ impl NvGpuFanCoolersInfo {
             _reserved1: 0,
             count: 0,
             _reserved2: [0u32; 8],
-            coolers: [ unsafe { NvFanCoolerInfo::zeroed() };
-                NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
+            coolers: [unsafe { NvFanCoolerInfo::zeroed() }; NVAPI_CLIENT_MAX_COOLERS_PER_GPU],
         }
     }
 }
@@ -558,7 +615,7 @@ struct NvFanCoolerStatus {
     minimum: u32,
     maximum: u32,
     level: u32,
-    _reserved: [u32; 8]
+    _reserved: [u32; 8],
 }
 
 impl NvFanCoolerStatus {
@@ -573,7 +630,7 @@ struct NvGpuFanCoolersStatus {
     version: u32,
     count: u32,
     _reserved: [u32; 8],
-    coolers: [NvFanCoolerStatus; NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
+    coolers: [NvFanCoolerStatus; NVAPI_CLIENT_MAX_COOLERS_PER_GPU],
 }
 
 impl NvGpuFanCoolersStatus {
@@ -582,12 +639,10 @@ impl NvGpuFanCoolersStatus {
             version: NVAPI_VERSION::<NvGpuFanCoolersStatus>(1u32),
             count: 0,
             _reserved: [0u32; 8],
-            coolers: [ unsafe { NvFanCoolerStatus::zeroed() };
-                NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
+            coolers: [unsafe { NvFanCoolerStatus::zeroed() }; NVAPI_CLIENT_MAX_COOLERS_PER_GPU],
         }
     }
 }
-
 
 /// Fan control structure (new client API)
 #[repr(C)]
@@ -596,7 +651,7 @@ struct NvFanCoolerControl {
     id: u32,
     level: u32,
     mode: NV_COOLER_CONTROL_MODE,
-    _reserved: [u32; 8]
+    _reserved: [u32; 8],
 }
 
 impl NvFanCoolerControl {
@@ -612,7 +667,7 @@ struct NvGpuFanCoolersControl {
     _reserved1: u32,
     count: u32,
     _reserved2: [u32; 8],
-    coolers: [NvFanCoolerControl; NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
+    coolers: [NvFanCoolerControl; NVAPI_CLIENT_MAX_COOLERS_PER_GPU],
 }
 
 impl NvGpuFanCoolersControl {
@@ -622,12 +677,10 @@ impl NvGpuFanCoolersControl {
             _reserved1: 0u32,
             count: 0u32,
             _reserved2: [0u32; 8],
-            coolers: [ unsafe { NvFanCoolerControl::zeroed() };
-                NVAPI_CLIENT_MAX_COOLERS_PER_GPU]
+            coolers: [unsafe { NvFanCoolerControl::zeroed() }; NVAPI_CLIENT_MAX_COOLERS_PER_GPU],
         }
     }
 }
-
 
 /// GPU utilisation
 #[repr(C)]
@@ -636,7 +689,7 @@ struct NvGpuUsages {
     /// Struct version
     version: u32,
     /// GPU utilisation for all GPUs
-    usage: [u32; NVAPI_MAX_USAGES_PER_GPU]
+    usage: [u32; NVAPI_MAX_USAGES_PER_GPU],
 }
 
 impl NvGpuUsages {
@@ -644,7 +697,7 @@ impl NvGpuUsages {
     fn new() -> NvGpuUsages {
         NvGpuUsages {
             version: NVAPI_VERSION::<NvGpuUsages>(1),
-            usage: [0u32; NVAPI_MAX_USAGES_PER_GPU]
+            usage: [0u32; NVAPI_MAX_USAGES_PER_GPU],
         }
     }
 }
@@ -669,29 +722,34 @@ pub struct NvidiaControl {
     /// All GPU handles
     handles: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS],
     /// Number of available GPUs in the system
-    _gpu_count: u32
+    _gpu_count: u32,
 }
 
 impl NvidiaControl {
-
     /// Initialises the native library corresponding to the current OS.
     /// `init()` should be called when calling `NvidiaControl::new()` so
     /// there is no need to call it directly.
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
             0 => {
-                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::uninitialized() };
+                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] =
+                    unsafe { mem::MaybeUninit::uninit().assume_init() };
                 let mut count = 0 as u32;
                 match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
-                    0 => Ok(NvidiaControl{ limits: lim,
-                        handles: handle, _gpu_count: count }),
-                    i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error: {}", i))
+                    0 => Ok(NvidiaControl {
+                        limits: lim,
+                        handles: handle,
+                        _gpu_count: count,
+                    }),
+                    i => Err(format!("NvAPI_EnumPhysicalGPUs() failed; error: {}", i)),
                 }
-            },
-            i => Err(format!("NvAPI_Initialize() failed; error: {}; No driver?", i))
+            }
+            i => Err(format!(
+                "NvAPI_Initialize() failed; error: {}; No driver?",
+                i
+            )),
         }
     }
-
 }
 
 impl Drop for NvidiaControl {
@@ -701,7 +759,6 @@ impl Drop for NvidiaControl {
 }
 
 impl NvidiaControl {
-
     /// Check if the supplied GPU id corresponds to a physical GPU. This
     /// function will return an `Err` if the specified id is outside the
     /// defined boundaries or `()` otherwise.
@@ -711,27 +768,28 @@ impl NvidiaControl {
     /// * `gpu` - The GPU id to check
     fn check_gpu_id(&self, gpu: u32) -> Result<(), String> {
         if gpu > (self._gpu_count - 1) {
-            Err(format!("check_gpu_id() failed; id {} > {}",
-                        gpu, self._gpu_count - 1))
+            Err(format!(
+                "check_gpu_id() failed; id {} > {}",
+                gpu,
+                self._gpu_count - 1
+            ))
         } else {
             Ok(())
         }
     }
-
 }
 
 impl NvFanController for NvidiaControl {
-
     fn get_temp(&self, gpu: u32) -> Result<i32, String> {
-
         self.check_gpu_id(gpu)?;
 
         let mut thermal = NV_GPU_THERMAL_SETTINGS_V2::new();
-        match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[gpu as usize],
-                                                    0, &mut thermal) }
-        {
+        match unsafe { NvAPI_GPU_GetThermalSettings(self.handles[gpu as usize], 0, &mut thermal) } {
             0 => Ok(thermal.temp(0)),
-            i => Err(format!("NvAPI_GPU_GetThermalSettings() failed; error {}", i))
+            i => Err(format!(
+                "NvAPI_GPU_GetThermalSettings() failed; error {}",
+                i
+            )),
         }
     }
 
@@ -740,32 +798,35 @@ impl NvFanController for NvidiaControl {
     }
 
     fn gpu_coolers(&self, gpu: u32) -> Result<Cow<Vec<u32>>, String> {
-
         self.check_gpu_id(gpu)?;
 
         let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize],
-                                                   NVAPI_COOLER_TARGET_ALL as _,
-                                                   &mut cooler_settings) }
-        {
+        match unsafe {
+            NvAPI_GPU_GetCoolerSettings(
+                self.handles[gpu as usize],
+                NVAPI_COOLER_TARGET_ALL as _,
+                &mut cooler_settings,
+            )
+        } {
             0 => {
                 let count = cooler_settings.count as u32;
-                Ok(Cow::Owned(
-                    (0..count).collect::<Vec<u32>>()))
-            },
-            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+                Ok(Cow::Owned((0..count).collect::<Vec<u32>>()))
+            }
+            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i)),
         }
     }
 
     fn get_ctrl_status(&self, gpu: u32) -> Result<NVCtrlFanControlState, String> {
-
         self.check_gpu_id(gpu)?;
 
         let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize],
-                                                   NVAPI_COOLER_TARGET_ALL as _,
-                                                   &mut cooler_settings) }
-        {
+        match unsafe {
+            NvAPI_GPU_GetCoolerSettings(
+                self.handles[gpu as usize],
+                NVAPI_COOLER_TARGET_ALL as _,
+                &mut cooler_settings,
+            )
+        } {
             0 => {
                 // Technically each cooler can have different policy; however for our
                 // purpose all coolers should ideally have the same policy. So,
@@ -775,24 +836,23 @@ impl NvFanController for NvidiaControl {
                 // I'm wondering if it would make better sense to check all coolers and
                 // return an error if policies differ.
                 match cooler_settings.coolers[0].current_policy {
-                    NV_COOLER_POLICY::MANUAL => { Ok(NVCtrlFanControlState::Manual) },
-                    NV_COOLER_POLICY::PERF          | NV_COOLER_POLICY::CONTINUOUS_SW |
-                    NV_COOLER_POLICY::CONTINUOUS_HW | NV_COOLER_POLICY::DEFAULT |
-                    NV_COOLER_POLICY::DISCRETE => {
-                            Ok(NVCtrlFanControlState::Auto)
-                    },
-                    i => {
-                        Err(format!("NvAPI_GPU_GetCoolerSettings() unknown policy: {:?}", i))
-                    }
+                    NV_COOLER_POLICY::MANUAL => Ok(NVCtrlFanControlState::Manual),
+                    NV_COOLER_POLICY::PERF
+                    | NV_COOLER_POLICY::CONTINUOUS_SW
+                    | NV_COOLER_POLICY::CONTINUOUS_HW
+                    | NV_COOLER_POLICY::DEFAULT
+                    | NV_COOLER_POLICY::DISCRETE => Ok(NVCtrlFanControlState::Auto),
+                    i => Err(format!(
+                        "NvAPI_GPU_GetCoolerSettings() unknown policy: {:?}",
+                        i
+                    )),
                 }
-
-            },
-            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+            }
+            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i)),
         }
     }
 
     fn set_ctrl_type(&self, gpu: u32, typ: NVCtrlFanControlState) -> Result<(), String> {
-
         self.check_gpu_id(gpu)?;
 
         let coolers = &*self.gpu_coolers(gpu)?;
@@ -807,48 +867,48 @@ impl NvFanController for NvidiaControl {
             levels.set_level(*c, fanspeed);
         }
 
-        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[gpu as usize],
-                                                 NVAPI_COOLER_TARGET_ALL as _, &levels) }
-        {
-            0 => { Ok(()) },
-            i => { return Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
+        match unsafe {
+            NvAPI_GPU_SetCoolerLevels(
+                self.handles[gpu as usize],
+                NVAPI_COOLER_TARGET_ALL as _,
+                &levels,
+            )
+        } {
+            0 => Ok(()),
+            i => return Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)),
         }
-
     }
 
     fn get_fanspeed(&self, gpu: u32, id: u32) -> Result<i32, String> {
-
         self.check_gpu_id(gpu)?;
 
         let mut cooler_settings = NvGpuCoolerSettings::new();
-        match unsafe { NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize], id,
-                                                   &mut cooler_settings) }
-        {
+        match unsafe {
+            NvAPI_GPU_GetCoolerSettings(self.handles[gpu as usize], id, &mut cooler_settings)
+        } {
             0 => Ok(cooler_settings.coolers[id as usize].current_level),
-            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i))
+            i => Err(format!("NvAPI_GPU_GetCoolerSettings() failed; error {}", i)),
         }
     }
 
-     // There is a bug here but it's not of nvfancontrol. If the GPU has more than
-     // one cooler it is impossible to get its RPM reading since there is no function
-     // for that in NVAPI; NvAPI_GPU_GetTachReading does not allow indexing on the
-     // coolers. Unfortunately this RPM reading is probably meaningless on GPUs with
-     // multiple coolers. It might be the RPM of the first coolers or who knows? There
-     // is no documentation anywhere on the public NVAPI. In any case the GPU coolers
-     // API is butchered anyway because reasons.
+    // There is a bug here but it's not of nvfancontrol. If the GPU has more than
+    // one cooler it is impossible to get its RPM reading since there is no function
+    // for that in NVAPI; NvAPI_GPU_GetTachReading does not allow indexing on the
+    // coolers. Unfortunately this RPM reading is probably meaningless on GPUs with
+    // multiple coolers. It might be the RPM of the first coolers or who knows? There
+    // is no documentation anywhere on the public NVAPI. In any case the GPU coolers
+    // API is butchered anyway because reasons.
     fn get_fanspeed_rpm(&self, gpu: u32, _id: u32) -> Result<i32, String> {
-
         self.check_gpu_id(gpu)?;
 
         let mut speed = 0 as libc::c_uint;
         match unsafe { NvAPI_GPU_GetTachReading(self.handles[gpu as usize], &mut speed) } {
             0 => Ok(speed as i32),
-            i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i))
+            i => Err(format!("NvAPI_GPU_GetTachReading() failed; error {}", i)),
         }
     }
 
     fn set_fanspeed(&self, gpu: u32, id: u32, speed: i32) -> Result<(), String> {
-
         self.check_gpu_id(gpu)?;
 
         let true_speed = self.true_speed(speed);
@@ -856,17 +916,17 @@ impl NvFanController for NvidiaControl {
         // Retain the existing (global) policy for cooler
         let policy = match self.get_ctrl_status(gpu) {
             Ok(mode) => mode_to_policy(mode),
-            Err(e) => { return Err(e); }
+            Err(e) => {
+                return Err(e);
+            }
         };
 
         let mut levels = NvGpuCoolerLevels::new();
         levels.set_policy(id, policy);
         levels.set_level(id, true_speed as i32);
-        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[gpu as usize],
-                                                 id, &levels) }
-        {
-            0 => { Ok(()) },
-            i => { Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)) }
+        match unsafe { NvAPI_GPU_SetCoolerLevels(self.handles[gpu as usize], id, &levels) } {
+            0 => Ok(()),
+            i => Err(format!("NvAPI_GPU_SetCoolerLevels() failed; error {}", i)),
         }
     }
 
@@ -875,38 +935,37 @@ impl NvFanController for NvidiaControl {
         let mut v: libc::c_uint = 0;
 
         match unsafe { NvAPI_SYS_GetDriverAndBranchVersion(&mut v, &mut b) } {
-            0 => Ok(format!("{:.2}", (v as f32)/100.0)),
-            i => Err(format!("NvAPI_SYS_GetDriverAndBranchVersion() failed; error {:?}", i))
+            0 => Ok(format!("{:.2}", (v as f32) / 100.0)),
+            i => Err(format!(
+                "NvAPI_SYS_GetDriverAndBranchVersion() failed; error {:?}",
+                i
+            )),
         }
     }
 
     fn get_adapter(&self, gpu: u32) -> Result<String, String> {
-
         self.check_gpu_id(gpu)?;
 
         let mut adapter = NvAPI_ShortString::new();
         match unsafe { NvAPI_GPU_GetFullName(self.handles[gpu as usize], &mut adapter) } {
             0 => Ok(adapter.to_string()),
-            i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i))
+            i => Err(format!("NvAPI_GPU_GetFullName() failed; error {:?}", i)),
         }
     }
 
     fn get_utilization(&self, gpu: u32) -> Result<HashMap<&str, i32>, String> {
-
         self.check_gpu_id(gpu)?;
 
         let mut gpu_usages = NvGpuUsages::new();
-        match unsafe { NvAPI_GPU_GetUsages(self.handles[gpu as usize],
-                                           &mut gpu_usages) }
-        {
+        match unsafe { NvAPI_GPU_GetUsages(self.handles[gpu as usize], &mut gpu_usages) } {
             0 => {
                 let mut ret: HashMap<&str, i32> = HashMap::with_capacity(3);
                 ret.insert("graphics", gpu_usages.usage[2] as i32);
                 ret.insert("memory", gpu_usages.usage[6] as i32);
                 ret.insert("video", gpu_usages.usage[10] as i32);
                 Ok(ret)
-            },
-            i => Err(format!("NvAPI_GPU_GetUsages() failed; error {}", i))
+            }
+            i => Err(format!("NvAPI_GPU_GetUsages() failed; error {}", i)),
         }
     }
 }
