@@ -680,7 +680,7 @@ impl NvidiaControl {
     pub fn init(lim: (u16, u16)) -> Result<NvidiaControl, String> {
         match unsafe { NvAPI_Initialize() } {
             0 => {
-                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::uninitialized() };
+                let mut handle: [NvPhysicalGpuHandlePtr; NVAPI_MAX_PHYSICAL_GPUS] = unsafe { mem::MaybeUninit::uninit().assume_init() };
                 let mut count = 0 as u32;
                 match unsafe { NvAPI_EnumPhysicalGPUs(&mut handle, &mut count) } {
                     0 => Ok(NvidiaControl{ limits: lim,

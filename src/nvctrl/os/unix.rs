@@ -239,7 +239,7 @@ impl NvidiaControl {
 
             for i in 0..gpu_count {
                 let mut len = -1 as i32;
-                let v: *mut c_uchar = unsafe { mem::uninitialized() };
+                let v: *mut c_uchar = unsafe { mem::MaybeUninit::uninit().assume_init() };
 
                 match unsafe {
                     XNVCTRLQueryTargetBinaryData(dpy, CTRL_TARGET::GPU, i, 0,
@@ -442,7 +442,7 @@ impl NvFanController for NvidiaControl {
             return Err("XNVCTRLIsNvScreen failed; no screens assigned to the NVidia driver".to_string());
         }
 
-        let v: *mut c_char = unsafe { mem::uninitialized() };
+        let v: *mut c_char = unsafe { mem::MaybeUninit::uninit().assume_init() };
         match unsafe {
             XNVCTRLQueryStringAttribute(self.dpy, nv_screen, 0, CTRL_ATTR::NVIDIA_DRIVER_VERSION, &v)
         } {
@@ -458,7 +458,7 @@ impl NvFanController for NvidiaControl {
 
         self.check_gpu_id(id)?;
 
-        let v: *mut c_char = unsafe { mem::uninitialized() };
+        let v: *mut c_char = unsafe { mem::MaybeUninit::uninit().assume_init() };
         match unsafe {
             XNVCTRLQueryTargetStringAttribute(self.dpy, CTRL_TARGET::GPU, id as i32,
                                               0, CTRL_ATTR::PRODUCT_NAME, &v)
@@ -475,7 +475,7 @@ impl NvFanController for NvidiaControl {
 
         self.check_gpu_id(id)?;
 
-        let v: *mut c_char = unsafe { mem::uninitialized() };
+        let v: *mut c_char = unsafe { mem::MaybeUninit::uninit().assume_init() };
         match unsafe {
             XNVCTRLQueryTargetStringAttribute(self.dpy, CTRL_TARGET::GPU, 0, 0,
                                               CTRL_ATTR::UTILIZATION, &v)
