@@ -14,7 +14,7 @@ toml = "0.5"
 dirs = "2.0"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.17"
+nix = "0.20.2"
 
 [target.'cfg(windows)'.dependencies]
 ctrlc = "3.1"
