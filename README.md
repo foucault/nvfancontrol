@@ -30,7 +30,7 @@ build the project from source read along.
 
 You will need:
 
-* the Rust compiler toolchain, stable >=1.34 or nightly (build)
+* the Rust compiler toolchain, stable >=1.36 or nightly (build)
 * XNVCtrl; static (build only) or dynamic (build and runtime)
 * Xlib (build and runtime)
 * Xext (build and runtime)
@@ -43,7 +43,7 @@ completely untested on FreeBSD (bug reports are welcome).
 
 You will need:
 
-* the Rust compiler toolchain, stable >=1.15 or nightly. Be adviced that you
+* the Rust compiler toolchain, stable >=1.40 or nightly. Be advised that you
 need the **MSVC ABI** version of the toolchain not GNU. In order to target the
 MSVC ABI for Rust you will also need the [Visual C++ build
 tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2017)
